@@ -45,6 +45,7 @@ export default async function ClipPage({
       <ShadowingPlayer
         clipId={clip.id}
         youtubeVideoId={clip.youtubeVideoId}
+        audioUrl={clip.audioUrl}
         transcript={clip.transcript ?? []}
         startSeconds={clip.startSeconds}
         recordings={recordings}

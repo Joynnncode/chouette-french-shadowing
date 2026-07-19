@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { getClips } from "@/lib/queries";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Heart } from "lucide-react";
+import { Heart, Music } from "lucide-react";
 import { LevelFilter } from "./level-filter";
 import { AddClipDialog } from "./add-clip-dialog";
 import { FavoriteButton } from "./favorite-button";
@@ -50,13 +50,17 @@ export default async function LibraryPage({
           {clips.map((clip) => (
             <Card key={clip.id} className="flex flex-col overflow-hidden pt-0">
               <Link href={`/library/${clip.id}`}>
-                <div className="relative aspect-video w-full bg-muted">
-                  <Image
-                    src={`https://i.ytimg.com/vi/${clip.youtubeVideoId}/hqdefault.jpg`}
-                    alt={clip.title}
-                    fill
-                    className="object-cover"
-                  />
+                <div className="relative flex aspect-video w-full items-center justify-center bg-muted">
+                  {clip.youtubeVideoId ? (
+                    <Image
+                      src={`https://i.ytimg.com/vi/${clip.youtubeVideoId}/hqdefault.jpg`}
+                      alt={clip.title}
+                      fill
+                      className="object-cover"
+                    />
+                  ) : (
+                    <Music className="h-8 w-8 text-muted-foreground" />
+                  )}
                 </div>
               </Link>
               <CardHeader className="flex-1">

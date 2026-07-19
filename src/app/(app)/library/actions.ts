@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
+import { put } from "@vercel/blob";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { clips, favorites } from "@/db/schema";
@@ -51,6 +52,51 @@ export async function addClipAction(formData: FormData) {
     level,
     transcript,
     startSeconds,
+    addedByUserId: session.user.id,
+  });
+
+  revalidatePath("/library");
+  return { error: null };
+}
+
+export async function addAudioClipAction(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) {
+    return { error: "Give the clip a title." };
+  }
+
+  const level = String(formData.get("level") ?? "") as "A1" | "A2" | "B1" | "B2";
+  if (!["A1", "A2", "B1", "B2"].includes(level)) {
+    return { error: "Pick a valid level." };
+  }
+
+  const channelName = String(formData.get("channelName") ?? "").trim() || null;
+
+  const file = formData.get("audio");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Choose an audio file to upload." };
+  }
+  if (!file.type.startsWith("audio/")) {
+    return { error: "That file doesn't look like an audio file." };
+  }
+
+  const blob = await put(`clip-audio/${session.user.id}/${crypto.randomUUID()}`, file, {
+    access: "public",
+    contentType: file.type,
+  });
+
+  const manualTranscript = String(formData.get("transcript") ?? "").trim();
+  const transcript = manualTranscript ? parseManualTranscript(manualTranscript, 4, 0) : null;
+
+  await db.insert(clips).values({
+    audioUrl: blob.url,
+    title,
+    channelName,
+    level,
+    transcript,
     addedByUserId: session.user.id,
   });
 

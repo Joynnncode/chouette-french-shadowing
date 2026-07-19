@@ -58,18 +58,21 @@ function loadYoutubeApi(): Promise<void> {
 export function ShadowingPlayer({
   clipId,
   youtubeVideoId,
+  audioUrl,
   transcript,
   startSeconds,
   recordings,
 }: {
   clipId: string;
-  youtubeVideoId: string;
+  youtubeVideoId: string | null;
+  audioUrl: string | null;
   transcript: TranscriptLine[];
   startSeconds: number;
   recordings: Recording[];
 }) {
   const playerRef = useRef<YTPlayer | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const sourceAudioRef = useRef<HTMLAudioElement>(null);
   const activeLineRef = useRef<HTMLButtonElement>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
 
@@ -80,7 +83,22 @@ export function ShadowingPlayer({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
+  function getCurrentTime(): number {
+    if (youtubeVideoId) return playerRef.current?.getCurrentTime() ?? 0;
+    return sourceAudioRef.current?.currentTime ?? 0;
+  }
+
+  function seekTo(seconds: number) {
+    if (youtubeVideoId) {
+      playerRef.current?.seekTo(seconds, true);
+    } else if (sourceAudioRef.current) {
+      sourceAudioRef.current.currentTime = seconds;
+      sourceAudioRef.current.play();
+    }
+  }
+
   useEffect(() => {
+    if (!youtubeVideoId) return;
     let cancelled = false;
     loadYoutubeApi().then(() => {
       if (cancelled || !containerRef.current) return;
@@ -98,9 +116,7 @@ export function ShadowingPlayer({
   useEffect(() => {
     if (!transcript.length) return;
     const interval = setInterval(() => {
-      const player = playerRef.current;
-      if (!player?.getCurrentTime) return;
-      const t = player.getCurrentTime();
+      const t = getCurrentTime();
       let idx = -1;
       for (let i = 0; i < transcript.length; i++) {
         if (t >= transcript[i].start) idx = i;
@@ -108,6 +124,7 @@ export function ShadowingPlayer({
       setActiveIndex((prev) => (prev === idx ? prev : idx));
     }, 300);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transcript]);
 
   useEffect(() => {
@@ -154,9 +171,15 @@ export function ShadowingPlayer({
   return (
     <div className="grid gap-6 lg:grid-cols-5">
       <div className="lg:col-span-3">
-        <div className="aspect-video w-full overflow-hidden rounded-lg border border-border bg-black">
-          <div ref={containerRef} className="h-full w-full" />
-        </div>
+        {youtubeVideoId ? (
+          <div className="aspect-video w-full overflow-hidden rounded-lg border border-border bg-black">
+            <div ref={containerRef} className="h-full w-full" />
+          </div>
+        ) : (
+          <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 rounded-lg border border-border bg-muted p-6">
+            <audio ref={sourceAudioRef} src={audioUrl ?? undefined} controls className="w-full" />
+          </div>
+        )}
 
         <Card className="mt-4">
           <CardContent className="flex items-center gap-3 py-4">
@@ -191,7 +214,7 @@ export function ShadowingPlayer({
                 <button
                   key={i}
                   ref={i === activeIndex ? activeLineRef : undefined}
-                  onClick={() => playerRef.current?.seekTo(line.start, true)}
+                  onClick={() => seekTo(line.start)}
                   className={cn(
                     "rounded-md px-2 py-1.5 text-left text-sm leading-relaxed transition-colors",
                     i === activeIndex

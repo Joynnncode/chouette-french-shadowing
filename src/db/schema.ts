@@ -73,7 +73,8 @@ export const clips = pgTable("clip", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
-  youtubeVideoId: text("youtube_video_id").notNull(),
+  youtubeVideoId: text("youtube_video_id"),
+  audioUrl: text("audio_url"),
   title: text("title").notNull(),
   channelName: text("channel_name"),
   level: cefrLevel("level").notNull(),
