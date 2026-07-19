@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Mic, Square, Play, Pause } from "lucide-react";
+import { Mic, Square, Play, Pause, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { addVocabularyAction } from "../../vocabulary/actions";
+import { uploadRecordingAction, deleteRecordingAction } from "./recordings-actions";
 
 type TranscriptLine = { start: number; dur: number; text: string };
+type Recording = { id: string; url: string; createdAt: Date };
 
 declare global {
   interface Window {
@@ -57,19 +60,23 @@ export function ShadowingPlayer({
   youtubeVideoId,
   transcript,
   startSeconds,
+  recordings,
 }: {
   clipId: string;
   youtubeVideoId: string;
   transcript: TranscriptLine[];
   startSeconds: number;
+  recordings: Recording[];
 }) {
   const playerRef = useRef<YTPlayer | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const activeLineRef = useRef<HTMLButtonElement>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
 
+  const router = useRouter();
   const [isRecording, setIsRecording] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -113,10 +120,23 @@ export function ShadowingPlayer({
       const recorder = new MediaRecorder(stream);
       chunksRef.current = [];
       recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         setRecordingUrl(URL.createObjectURL(blob));
         stream.getTracks().forEach((track) => track.stop());
+
+        setIsUploading(true);
+        const formData = new FormData();
+        formData.set("audio", blob, "recording.webm");
+        try {
+          await uploadRecordingAction(clipId, formData);
+          router.refresh();
+          toast.success("Recording saved to your history");
+        } catch {
+          toast.error("Couldn't save that recording.");
+        } finally {
+          setIsUploading(false);
+        }
       };
       recorder.start();
       mediaRecorderRef.current = recorder;
@@ -154,6 +174,9 @@ export function ShadowingPlayer({
             {recordingUrl && (
               <RecordingPlayback key={recordingUrl} src={recordingUrl} />
             )}
+            {isUploading && (
+              <span className="text-sm text-muted-foreground">Saving…</span>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -161,9 +184,7 @@ export function ShadowingPlayer({
       <Card className="lg:col-span-2">
         <CardContent className="max-h-[32rem] overflow-y-auto py-4">
           {transcript.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No transcript available for this clip yet.
-            </p>
+            <RecordingHistory clipId={clipId} recordings={recordings} />
           ) : (
             <div className="flex flex-col gap-1">
               {transcript.map((line, i) => (
@@ -242,15 +263,82 @@ function WordTapper({
   );
 }
 
-function RecordingPlayback({ src }: { src: string }) {
+function RecordingHistory({
+  clipId,
+  recordings,
+}: {
+  clipId: string;
+  recordings: Recording[];
+}) {
+  const router = useRouter();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      await deleteRecordingAction(id, clipId);
+      router.refresh();
+    } catch {
+      toast.error("Couldn't delete that recording.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  if (recordings.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No transcript available for this clip yet. Record yourself with the button on the left —
+        your recordings will show up here so you can play them back or delete the ones you don&apos;t
+        want.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs text-muted-foreground">Your recording history</p>
+      {recordings.map((recording) => (
+        <div
+          key={recording.id}
+          className="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5"
+        >
+          <RecordingPlayback src={recording.url} label={formatDate(recording.createdAt)} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            disabled={deletingId === recording.id}
+            onClick={() => handleDelete(recording.id)}
+            aria-label="Delete recording"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatDate(date: Date) {
+  return new Date(date).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function RecordingPlayback({ src, label = "Your recording" }: { src: string; label?: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-w-0 items-center gap-2">
       <Button
         size="icon"
         variant="ghost"
+        className="shrink-0"
         onClick={() => {
           if (playing) {
             audioRef.current?.pause();
@@ -268,7 +356,7 @@ function RecordingPlayback({ src }: { src: string }) {
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
       />
-      <span className="text-sm text-muted-foreground">Your recording</span>
+      <span className="truncate text-sm text-muted-foreground">{label}</span>
     </div>
   );
 }

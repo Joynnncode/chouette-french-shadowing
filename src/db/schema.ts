@@ -122,6 +122,20 @@ export const vocabularyEntries = pgTable("vocabulary_entry", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const recordings = pgTable("recording", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  clipId: text("clip_id")
+    .notNull()
+    .references(() => clips.id, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const errorNotebookEntries = pgTable("error_notebook_entry", {
   id: text("id")
     .primaryKey()

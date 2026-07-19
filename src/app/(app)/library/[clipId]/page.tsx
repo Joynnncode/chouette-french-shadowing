@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Heart } from "lucide-react";
 import { FavoriteButton } from "../favorite-button";
 import { ShadowingPlayer } from "./shadowing-player";
+import { getRecordingsForClip } from "./recordings-actions";
 
 export default async function ClipPage({
   params,
@@ -17,6 +18,8 @@ export default async function ClipPage({
 
   const clip = await getClipWithTranscript(clipId, userId);
   if (!clip) notFound();
+
+  const recordings = await getRecordingsForClip(clip.id, userId);
 
   return (
     <div className="flex flex-col gap-6">
@@ -44,6 +47,7 @@ export default async function ClipPage({
         youtubeVideoId={clip.youtubeVideoId}
         transcript={clip.transcript ?? []}
         startSeconds={clip.startSeconds}
+        recordings={recordings}
       />
     </div>
   );
