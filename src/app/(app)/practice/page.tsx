@@ -122,8 +122,8 @@ export default function PracticePage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">AI Practice</h1>
           <p className="text-sm text-muted-foreground">
-            Speak in French using the mic, or type. Replies are read aloud. Mistakes get flagged so
-            you can save them to your error notebook.
+            Tap the mic, speak in French, tap again to send. Replies are read aloud. Mistakes get
+            flagged so you can save them to your error notebook.
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -237,7 +237,7 @@ export default function PracticePage() {
 
       {isListening && (
         <p className="-mb-2 text-sm text-muted-foreground italic">
-          {interimText || "Listening…"}
+          {interimText || "Listening… tap the mic again to send"}
         </p>
       )}
 

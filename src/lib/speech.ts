@@ -61,33 +61,44 @@ export function useSpeechRecognition({
 
     const recognition = new SpeechRecognitionCtor();
     recognition.lang = lang;
-    recognition.continuous = false;
+    // continuous=true: keep listening across pauses instead of letting the
+    // browser auto-stop (which can end the session without ever emitting a
+    // "final" result — losing what was said). Sending is triggered
+    // explicitly by stop(), not by waiting on isFinal.
+    recognition.continuous = true;
     recognition.interimResults = true;
 
+    let finalText = "";
+    let latestInterim = "";
+    let finished = false;
+
     recognition.onresult = (event) => {
-      let finalText = "";
       let interim = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const text = result[0].transcript;
-        if (result.isFinal) finalText += text;
-        else interim += text;
+        if (result.isFinal) {
+          finalText += (finalText ? " " : "") + text.trim();
+        } else {
+          interim += text;
+        }
       }
+      latestInterim = interim;
       setInterimText(interim);
-      if (finalText.trim()) onFinalResultRef.current(finalText.trim());
     };
 
-    recognition.onend = () => {
+    const finish = () => {
+      if (finished) return;
+      finished = true;
       setIsListening(false);
       setInterimText("");
       recognitionRef.current = null;
+      const text = (finalText || latestInterim).trim();
+      if (text) onFinalResultRef.current(text);
     };
 
-    recognition.onerror = () => {
-      setIsListening(false);
-      setInterimText("");
-      recognitionRef.current = null;
-    };
+    recognition.onend = finish;
+    recognition.onerror = finish;
 
     recognitionRef.current = recognition;
     recognition.start();
