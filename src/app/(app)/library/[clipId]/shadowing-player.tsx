@@ -288,9 +288,8 @@ function RecordingHistory({
   if (recordings.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No transcript available for this clip yet. Record yourself with the button on the left —
-        your recordings will show up here so you can play them back or delete the ones you don&apos;t
-        want.
+        Record yourself with the button on the left — your recordings will show up here so you can
+        play them back or delete the ones you don&apos;t want.
       </p>
     );
   }

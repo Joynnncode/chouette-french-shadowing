@@ -58,6 +58,15 @@ export async function addClipAction(formData: FormData) {
   return { error: null };
 }
 
+export async function deleteClipAction(clipId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  await db.delete(clips).where(eq(clips.id, clipId));
+
+  revalidatePath("/library");
+}
+
 export async function toggleFavoriteAction(clipId: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not signed in");

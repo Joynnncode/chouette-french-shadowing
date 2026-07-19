@@ -8,6 +8,7 @@ import { Heart } from "lucide-react";
 import { LevelFilter } from "./level-filter";
 import { AddClipDialog } from "./add-clip-dialog";
 import { FavoriteButton } from "./favorite-button";
+import { DeleteClipButton } from "./delete-clip-button";
 
 const LEVELS = ["A1", "A2", "B1", "B2"] as const;
 
@@ -76,7 +77,10 @@ export default async function LibraryPage({
                   <Heart className="h-4 w-4" />
                   {clip.favoriteCount}
                 </span>
-                <FavoriteButton clipId={clip.id} isFavorited={clip.isFavorited} />
+                <div className="flex items-center">
+                  <FavoriteButton clipId={clip.id} isFavorited={clip.isFavorited} />
+                  <DeleteClipButton clipId={clip.id} />
+                </div>
               </CardFooter>
             </Card>
           ))}
