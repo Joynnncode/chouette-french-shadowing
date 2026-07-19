@@ -36,10 +36,11 @@ export async function getVideoInfo(videoId: string): Promise<{
 export type TranscriptLine = { start: number; dur: number; text: string };
 
 /**
- * Best-effort transcript fetch via YouTube's public timedtext endpoint.
- * This is the same undocumented-but-widely-used approach most open-source
- * transcript tools rely on; it can break if YouTube changes its page markup,
- * in which case clips fall back to "no transcript" and can be added manually.
+ * Best-effort transcript fetch via YouTube's public timedtext endpoint. As of
+ * mid-2026 YouTube blocks most non-browser requests to this endpoint (empty
+ * body, HTTP 200), so this frequently returns null — callers should treat
+ * that as normal and fall back to a manually pasted transcript instead of
+ * retrying with spoofed headers or tokens.
  */
 export async function getTranscript(
   videoId: string,
@@ -84,4 +85,17 @@ export async function getTranscript(
     });
   }
   return events.length ? events : null;
+}
+
+/**
+ * Turns a manually pasted transcript (one line per subtitle/sentence) into
+ * TranscriptLine[] with evenly spaced approximate timestamps. Used when
+ * automatic caption fetching fails or a clip has no official captions.
+ */
+export function parseManualTranscript(raw: string, secondsPerLine = 4): TranscriptLine[] {
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((text, i) => ({ start: i * secondsPerLine, dur: secondsPerLine, text }));
 }

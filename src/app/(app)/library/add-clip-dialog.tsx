@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -77,6 +78,17 @@ export function AddClipDialog() {
                   <SelectItem value="B2">B2</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="transcript">Transcript (optional)</Label>
+              <Textarea
+                id="transcript"
+                name="transcript"
+                placeholder={
+                  "Paste the French transcript here, one line per sentence.\nWe'll try to fetch captions automatically first — YouTube often blocks that, so pasting your own is the reliable option."
+                }
+                className="min-h-28"
+              />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>

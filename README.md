@@ -76,7 +76,7 @@ New cards are created with a `Basic` note type (`Front` = word, `Back` = transla
 
 ## Content sourcing
 
-Clips are added by pasting a YouTube URL. The app fetches the video title/channel via YouTube's official oEmbed endpoint and a best-effort transcript from YouTube's public caption track — nothing is downloaded or rehosted, playback always happens through the official embedded player, staying within YouTube's Terms of Service. If a video has no French captions available, add it anyway and note that shadowing text isn't available yet.
+Clips are added by pasting a YouTube URL. The app fetches the video title/channel via YouTube's official oEmbed endpoint, and attempts a best-effort automatic transcript fetch — nothing is ever downloaded or rehosted, playback always happens through the official embedded player. As of mid-2026 YouTube blocks most automated caption requests, so auto-fetch frequently fails; when it does, paste the French transcript into the "Transcript (optional)" box when adding the clip (one line per sentence — timing is approximated evenly, so sync won't be frame-perfect, but shadowing and word-saving both work). Clips added with no transcript at all still work for playback and recording, just without the synced text panel.
 
 ## Database scripts
 
@@ -84,6 +84,7 @@ Clips are added by pasting a YouTube URL. The app fetches the video title/channe
 - `npm run db:generate` — generate a SQL migration from schema changes
 - `npm run db:migrate` — apply generated migrations
 - `npm run db:studio` — open Drizzle Studio to browse your data
+- `npm run db:seed` — add a small starter set of leveled French clips (see `scripts/seed-clips.ts`)
 
 ## Deploying
 

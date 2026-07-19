@@ -5,7 +5,12 @@ import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { clips, favorites } from "@/db/schema";
-import { extractYoutubeVideoId, getTranscript, getVideoInfo } from "@/lib/youtube";
+import {
+  extractYoutubeVideoId,
+  getTranscript,
+  getVideoInfo,
+  parseManualTranscript,
+} from "@/lib/youtube";
 
 export async function addClipAction(formData: FormData) {
   const session = await auth();
@@ -27,7 +32,10 @@ export async function addClipAction(formData: FormData) {
     return { error: "Could not find that YouTube video." };
   }
 
-  const transcript = await getTranscript(videoId).catch(() => null);
+  const manualTranscript = String(formData.get("transcript") ?? "").trim();
+  const transcript = manualTranscript
+    ? parseManualTranscript(manualTranscript)
+    : await getTranscript(videoId).catch(() => null);
 
   await db.insert(clips).values({
     youtubeVideoId: videoId,
