@@ -6,7 +6,7 @@ import { DefaultChatTransport } from "ai";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Send, BookmarkPlus, Mic, Square, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -43,7 +43,7 @@ export default function PracticePage() {
   const lastSpokenIdRef = useRef<string | null>(null);
   const ttsSupported = isSpeechSynthesisSupported();
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, error, regenerate, clearError } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       headers: () => {
@@ -55,6 +55,10 @@ export default function PracticePage() {
         };
       },
     }),
+    onError: (err) => {
+      console.error("AI Practice chat error:", err);
+      toast.error(err.message || "Something went wrong talking to the AI.");
+    },
   });
 
   function sendText(text: string) {
@@ -159,6 +163,27 @@ export default function PracticePage() {
             Voice input isn&apos;t supported in this browser — try Chrome or Edge. You can still
             type below.
           </AlertDescription>
+        </Alert>
+      )}
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error.message || "Something went wrong talking to the AI."}</AlertDescription>
+          <AlertAction className="flex gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                clearError();
+                regenerate();
+              }}
+            >
+              Retry
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => clearError()}>
+              Dismiss
+            </Button>
+          </AlertAction>
         </Alert>
       )}
 

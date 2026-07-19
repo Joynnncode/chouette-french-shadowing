@@ -44,6 +44,15 @@ export async function POST(req: Request) {
   });
 
   return createUIMessageStreamResponse({
-    stream: toUIMessageStream({ stream: result.stream }),
+    stream: toUIMessageStream({
+      stream: result.stream,
+      onError: (error) => {
+        console.error("AI chat stream error:", error);
+        if (error == null) return "Something went wrong talking to the AI.";
+        if (typeof error === "string") return error;
+        if (error instanceof Error) return error.message;
+        return "Something went wrong talking to the AI.";
+      },
+    }),
   });
 }
