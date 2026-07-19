@@ -38,7 +38,6 @@ export function DeleteClipButton({ clipId }: { clipId: string }) {
           variant="ghost"
           size="icon"
           disabled={isPending}
-          onClick={(e) => e.preventDefault()}
           aria-label="Delete clip"
         >
           <Trash2 className="h-4 w-4" />
