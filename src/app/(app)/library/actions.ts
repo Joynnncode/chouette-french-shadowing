@@ -104,6 +104,19 @@ export async function addAudioClipAction(formData: FormData) {
   return { error: null };
 }
 
+export async function updateTranscriptAction(clipId: string, formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  const raw = String(formData.get("transcript") ?? "").trim();
+  const startSeconds = Number(formData.get("startSeconds") ?? 0) || 0;
+  const transcript = raw ? parseManualTranscript(raw, 4, startSeconds) : null;
+
+  await db.update(clips).set({ transcript }).where(eq(clips.id, clipId));
+
+  revalidatePath(`/library/${clipId}`);
+}
+
 export async function deleteClipAction(clipId: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not signed in");

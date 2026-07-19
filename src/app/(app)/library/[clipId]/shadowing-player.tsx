@@ -1,16 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Mic, Square, Play, Pause, Trash2 } from "lucide-react";
+import { Mic, Square, Play, Pause, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { addVocabularyAction } from "../../vocabulary/actions";
 import { uploadRecordingAction, deleteRecordingAction } from "./recordings-actions";
+import { updateTranscriptAction } from "../actions";
 
 type TranscriptLine = { start: number; dur: number; text: string };
 type Recording = { id: string; url: string; createdAt: Date };
@@ -205,7 +215,15 @@ export function ShadowingPlayer({
       </div>
 
       <Card className="lg:col-span-2">
-        <CardContent className="max-h-[32rem] overflow-y-auto py-4">
+        <CardContent className="flex max-h-[32rem] flex-col gap-3 overflow-y-auto py-4">
+          <div className="sticky top-0 z-10 -mt-1 flex items-center justify-between bg-card pt-1">
+            <p className="text-xs font-medium text-muted-foreground">Transcript</p>
+            <EditTranscriptDialog
+              clipId={clipId}
+              startSeconds={startSeconds}
+              transcript={transcript}
+            />
+          </div>
           {transcript.length === 0 ? (
             <RecordingHistory clipId={clipId} recordings={recordings} />
           ) : (
@@ -283,6 +301,66 @@ function WordTapper({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function EditTranscriptDialog({
+  clipId,
+  startSeconds,
+  transcript,
+}: {
+  clipId: string;
+  startSeconds: number;
+  transcript: TranscriptLine[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const initialText = transcript.map((line) => line.text).join("\n");
+
+  function handleSubmit(formData: FormData) {
+    startTransition(async () => {
+      try {
+        await updateTranscriptAction(clipId, formData);
+        router.refresh();
+        toast.success("Transcript saved");
+        setOpen(false);
+      } catch {
+        toast.error("Couldn't save the transcript.");
+      }
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs">
+          <Pencil className="h-3.5 w-3.5" />
+          {transcript.length ? "Edit" : "Add transcript"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <form action={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>{transcript.length ? "Edit transcript" : "Add transcript"}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <input type="hidden" name="startSeconds" value={startSeconds} />
+            <Textarea
+              name="transcript"
+              defaultValue={initialText}
+              placeholder="One line per sentence…"
+              className="min-h-56"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={isPending}>
+              {isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
