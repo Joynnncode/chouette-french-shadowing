@@ -7,10 +7,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Send, BookmarkPlus } from "lucide-react";
+import { Send, BookmarkPlus, Mic, Square, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { DEFAULT_MODELS, loadAiSettings, useHasAiKey } from "@/lib/ai-settings";
+import { useSpeechRecognition, speak, stopSpeaking, isSpeechSynthesisSupported } from "@/lib/speech";
 import { AiSettingsDialog } from "./ai-settings-dialog";
 import { addErrorEntryAction } from "../notebook/actions";
 
@@ -37,7 +38,10 @@ function parseCorrections(text: string): { prose: string; corrections: Correctio
 export default function PracticePage() {
   const hasKey = useHasAiKey();
   const [input, setInput] = useState("");
+  const [autoSpeak, setAutoSpeak] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const lastSpokenIdRef = useRef<string | null>(null);
+  const ttsSupported = isSpeechSynthesisSupported();
 
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
@@ -53,19 +57,58 @@ export default function PracticePage() {
     }),
   });
 
-  useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!input.trim()) return;
+  function sendText(text: string) {
+    if (!text.trim()) return;
     if (!hasKey) {
       toast.error("Add your AI API key first.");
       return;
     }
-    sendMessage({ text: input });
+    sendMessage({ text: text.trim() });
     setInput("");
+  }
+
+  const {
+    isListening,
+    interimText,
+    isSupported: micSupported,
+    start: startListening,
+    stop: stopListening,
+  } = useSpeechRecognition({
+    lang: "fr-FR",
+    onFinalResult: sendText,
+  });
+
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    if (!autoSpeak || status !== "ready") return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant" || lastSpokenIdRef.current === last.id) return;
+    lastSpokenIdRef.current = last.id;
+    const text = last.parts
+      .filter((p) => p.type === "text")
+      .map((p) => p.text)
+      .join("");
+    const { prose } = parseCorrections(text);
+    if (prose.trim()) speak(prose);
+  }, [messages, status, autoSpeak]);
+
+  useEffect(() => stopSpeaking, []);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    sendText(input);
+  }
+
+  function toggleListening() {
+    if (isListening) {
+      stopListening();
+    } else {
+      stopSpeaking();
+      startListening();
+    }
   }
 
   async function saveCorrection(c: Correction) {
@@ -79,16 +122,42 @@ export default function PracticePage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">AI Practice</h1>
           <p className="text-sm text-muted-foreground">
-            Chat in French. Mistakes get flagged so you can save them to your error notebook.
+            Speak in French using the mic, or type. Replies are read aloud. Mistakes get flagged so
+            you can save them to your error notebook.
           </p>
         </div>
-        <AiSettingsDialog />
+        <div className="flex items-center gap-1">
+          {ttsSupported && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                if (autoSpeak) stopSpeaking();
+                setAutoSpeak((v) => !v);
+              }}
+              aria-label={autoSpeak ? "Mute replies" : "Read replies aloud"}
+              title={autoSpeak ? "Mute replies" : "Read replies aloud"}
+            >
+              {autoSpeak ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            </Button>
+          )}
+          <AiSettingsDialog />
+        </div>
       </div>
 
       {!hasKey && (
         <Alert>
           <AlertDescription>
             Add your own Anthropic or OpenAI API key in AI settings to start chatting.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!micSupported && (
+        <Alert>
+          <AlertDescription>
+            Voice input isn&apos;t supported in this browser — try Chrome or Edge. You can still
+            type below.
           </AlertDescription>
         </Alert>
       )}
@@ -120,13 +189,24 @@ export default function PracticePage() {
               >
                 <div
                   className={cn(
-                    "max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm",
+                    "flex max-w-[85%] items-end gap-1.5 rounded-2xl px-4 py-2 text-sm",
                     message.role === "user"
                       ? "bg-primary text-primary-foreground"
                       : "bg-accent text-accent-foreground",
                   )}
                 >
-                  {prose}
+                  <span className="whitespace-pre-wrap">{prose}</span>
+                  {message.role === "assistant" && ttsSupported && prose.trim() && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 shrink-0"
+                      onClick={() => speak(prose)}
+                      aria-label="Play aloud"
+                    >
+                      <Volume2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </div>
                 {corrections.map((c, i) => (
                   <Card key={i} className="max-w-[85%] border-primary/30">
@@ -155,7 +235,25 @@ export default function PracticePage() {
         </CardContent>
       </Card>
 
+      {isListening && (
+        <p className="-mb-2 text-sm text-muted-foreground italic">
+          {interimText || "Listening…"}
+        </p>
+      )}
+
       <form onSubmit={handleSubmit} className="flex gap-2">
+        {micSupported && (
+          <Button
+            type="button"
+            variant={isListening ? "destructive" : "outline"}
+            size="icon"
+            disabled={!hasKey}
+            onClick={toggleListening}
+            aria-label={isListening ? "Stop listening" : "Speak"}
+          >
+            {isListening ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          </Button>
+        )}
         <Textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
