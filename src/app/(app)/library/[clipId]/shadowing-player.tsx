@@ -56,10 +56,12 @@ export function ShadowingPlayer({
   clipId,
   youtubeVideoId,
   transcript,
+  startSeconds,
 }: {
   clipId: string;
   youtubeVideoId: string;
   transcript: TranscriptLine[];
+  startSeconds: number;
 }) {
   const playerRef = useRef<YTPlayer | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -77,12 +79,13 @@ export function ShadowingPlayer({
       if (cancelled || !containerRef.current) return;
       playerRef.current = new window.YT.Player(containerRef.current, {
         videoId: youtubeVideoId,
-        playerVars: { rel: 0 },
+        playerVars: { rel: 0, start: startSeconds || undefined },
       });
     });
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [youtubeVideoId]);
 
   useEffect(() => {

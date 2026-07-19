@@ -80,6 +80,10 @@ export function AddClipDialog() {
               </Select>
             </div>
             <div className="flex flex-col gap-2">
+              <Label htmlFor="startAt">Start at (optional)</Label>
+              <Input id="startAt" name="startAt" placeholder="e.g. 1:45 — skip past an intro" />
+            </div>
+            <div className="flex flex-col gap-2">
               <Label htmlFor="transcript">Transcript (optional)</Label>
               <Textarea
                 id="transcript"

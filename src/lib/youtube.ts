@@ -91,11 +91,30 @@ export async function getTranscript(
  * Turns a manually pasted transcript (one line per subtitle/sentence) into
  * TranscriptLine[] with evenly spaced approximate timestamps. Used when
  * automatic caption fetching fails or a clip has no official captions.
+ * `startOffset` shifts every line so it lines up with a clip's start time.
  */
-export function parseManualTranscript(raw: string, secondsPerLine = 4): TranscriptLine[] {
+export function parseManualTranscript(
+  raw: string,
+  secondsPerLine = 4,
+  startOffset = 0,
+): TranscriptLine[] {
   return raw
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((text, i) => ({ start: i * secondsPerLine, dur: secondsPerLine, text }));
+    .map((text, i) => ({ start: startOffset + i * secondsPerLine, dur: secondsPerLine, text }));
+}
+
+/** Parses "1:45", "0:05", or a bare seconds string like "105" into seconds. */
+export function parseTimestamp(input: string): number | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+
+  const parts = trimmed.split(":").map((p) => p.trim());
+  if (parts.length < 2 || parts.length > 3 || parts.some((p) => !/^\d+$/.test(p))) return null;
+
+  const nums = parts.map((p) => parseInt(p, 10));
+  return nums.reduce((total, n) => total * 60 + n, 0);
 }

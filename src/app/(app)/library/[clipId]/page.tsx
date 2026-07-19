@@ -43,6 +43,7 @@ export default async function ClipPage({
         clipId={clip.id}
         youtubeVideoId={clip.youtubeVideoId}
         transcript={clip.transcript ?? []}
+        startSeconds={clip.startSeconds}
       />
     </div>
   );

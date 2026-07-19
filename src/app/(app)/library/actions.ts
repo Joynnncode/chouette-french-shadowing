@@ -10,6 +10,7 @@ import {
   getTranscript,
   getVideoInfo,
   parseManualTranscript,
+  parseTimestamp,
 } from "@/lib/youtube";
 
 export async function addClipAction(formData: FormData) {
@@ -32,9 +33,15 @@ export async function addClipAction(formData: FormData) {
     return { error: "Could not find that YouTube video." };
   }
 
+  const rawStartAt = String(formData.get("startAt") ?? "").trim();
+  const startSeconds = rawStartAt ? (parseTimestamp(rawStartAt) ?? 0) : 0;
+  if (rawStartAt && parseTimestamp(rawStartAt) === null) {
+    return { error: 'Start time should look like "1:45" or a number of seconds.' };
+  }
+
   const manualTranscript = String(formData.get("transcript") ?? "").trim();
   const transcript = manualTranscript
-    ? parseManualTranscript(manualTranscript)
+    ? parseManualTranscript(manualTranscript, 4, startSeconds)
     : await getTranscript(videoId).catch(() => null);
 
   await db.insert(clips).values({
@@ -43,6 +50,7 @@ export async function addClipAction(formData: FormData) {
     channelName: info.channelName,
     level,
     transcript,
+    startSeconds,
     addedByUserId: session.user.id,
   });
 
