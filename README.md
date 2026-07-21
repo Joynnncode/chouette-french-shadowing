@@ -1,5 +1,7 @@
 # Chouette — French Shadowing
 
+🔗 **Live app:** [chouette-french-shadowing.vercel.app](https://chouette-french-shadowing.vercel.app)
+
 Learn French by shadowing real YouTube clips leveled A1–B2, practice conversation with an AI tutor, and keep every new word and mistake in one place — synced to your own Anki deck.
 
 ## Features
@@ -19,7 +21,9 @@ Learn French by shadowing real YouTube clips leveled A1–B2, practice conversat
 - [Auth.js](https://authjs.dev) (NextAuth v5) for authentication
 - [Vercel AI SDK](https://ai-sdk.dev) for the AI practice chat (BYOK — no server-side AI key required)
 
-## Getting started
+## Getting started (run it locally)
+
+Just want to use the app? Go to the live link above — no setup needed. These steps are only for running your own copy of the code.
 
 ### 1. Install dependencies
 
@@ -58,7 +62,7 @@ npm run db:push
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3100](http://localhost:3100).
 
 ## AI practice — bring your own key
 
