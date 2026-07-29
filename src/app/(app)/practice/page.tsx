@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { DEFAULT_MODELS, loadAiSettings, useHasAiKey } from "@/lib/ai-settings";
 import { useSpeechRecognition, speak, stopSpeaking, isSpeechSynthesisSupported } from "@/lib/speech";
-import { AiSettingsDialog } from "./ai-settings-dialog";
+import { AiSettingsDialog } from "@/components/ai-settings-dialog";
 import { addErrorEntryAction } from "../notebook/actions";
 
 type Correction = { wrong: string; right: string; note: string };

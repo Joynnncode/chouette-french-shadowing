@@ -12,7 +12,7 @@ import {
 import type { AdapterAccountType } from "next-auth/adapters";
 
 export const cefrLevel = pgEnum("cefr_level", ["A1", "A2", "B1", "B2"]);
-export const errorSource = pgEnum("error_source", ["ai_chat"]);
+export const errorSource = pgEnum("error_source", ["ai_chat", "journal"]);
 
 // --- Auth.js tables ---
 
@@ -160,6 +160,18 @@ export const chatSessions = pgTable("chat_session", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   title: text("title").default("French practice").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const journalEntries = pgTable("journal_entry", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  feedback: text("feedback"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -10,13 +10,14 @@ export async function addErrorEntryAction(input: {
   originalText: string;
   correction: string;
   explanation?: string;
+  source?: "ai_chat" | "journal";
 }) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not signed in");
 
   await db.insert(errorNotebookEntries).values({
     userId: session.user.id,
-    source: "ai_chat",
+    source: input.source ?? "ai_chat",
     originalText: input.originalText,
     correction: input.correction,
     explanation: input.explanation ?? null,

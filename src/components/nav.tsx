@@ -18,6 +18,7 @@ import { useState } from "react";
 const links = [
   { href: "/library", label: "Library" },
   { href: "/practice", label: "AI Practice" },
+  { href: "/journal", label: "Journal" },
   { href: "/notebook", label: "Error Notebook" },
   { href: "/vocabulary", label: "Vocabulary" },
   { href: "/progress", label: "Progress" },
