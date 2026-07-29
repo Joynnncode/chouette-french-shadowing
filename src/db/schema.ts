@@ -7,6 +7,7 @@ import {
   boolean,
   jsonb,
   pgEnum,
+  date,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
 
@@ -161,6 +162,19 @@ export const chatSessions = pgTable("chat_session", {
   title: text("title").default("French practice").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// One row per user per calendar day (UTC) they checked in.
+export const checkIns = pgTable(
+  "check_in",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    date: date("date", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.date] })],
+);
 
 export const chatMessages = pgTable("chat_message", {
   id: text("id")

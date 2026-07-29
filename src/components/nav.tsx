@@ -20,6 +20,7 @@ const links = [
   { href: "/practice", label: "AI Practice" },
   { href: "/notebook", label: "Error Notebook" },
   { href: "/vocabulary", label: "Vocabulary" },
+  { href: "/progress", label: "Progress" },
 ];
 
 export function Nav({
