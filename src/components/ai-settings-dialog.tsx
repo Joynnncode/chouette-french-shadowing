@@ -29,9 +29,9 @@ import {
 
 export function AiSettingsDialog() {
   const [open, setOpen] = useState(false);
-  const [provider, setProvider] = useState<AiProvider>("anthropic");
+  const [provider, setProvider] = useState<AiProvider>("gemini");
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState(DEFAULT_MODELS.anthropic);
+  const [model, setModel] = useState(DEFAULT_MODELS.gemini);
 
   function handleOpenChange(next: boolean) {
     if (next) {
@@ -70,7 +70,16 @@ export function AiSettingsDialog() {
         <div className="flex flex-col gap-4 py-2">
           <p className="text-sm text-muted-foreground">
             Bring your own API key — it&apos;s stored only in your browser and sent directly to
-            power this chat. It never touches our database.
+            power this chat. It never touches our database. Don&apos;t want to pay for one?{" "}
+            <a
+              href="https://aistudio.google.com/apikey"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2"
+            >
+              Get a free Gemini key
+            </a>
+            .
           </p>
           <div className="flex flex-col gap-2">
             <Label>Provider</Label>
@@ -79,6 +88,7 @@ export function AiSettingsDialog() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="gemini">Google (Gemini) — free tier</SelectItem>
                 <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
                 <SelectItem value="openai">OpenAI</SelectItem>
               </SelectContent>
@@ -91,7 +101,9 @@ export function AiSettingsDialog() {
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder={provider === "anthropic" ? "sk-ant-..." : "sk-..."}
+              placeholder={
+                provider === "anthropic" ? "sk-ant-..." : provider === "gemini" ? "AIza..." : "sk-..."
+              }
             />
           </div>
           <div className="flex flex-col gap-2">

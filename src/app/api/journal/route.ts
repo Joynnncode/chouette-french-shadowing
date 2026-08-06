@@ -1,6 +1,7 @@
 import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createGoogle } from "@ai-sdk/google";
 
 export const maxDuration = 30;
 
@@ -31,7 +32,9 @@ export async function POST(req: Request) {
   const languageModel =
     provider === "openai"
       ? createOpenAI({ apiKey })(model)
-      : createAnthropic({ apiKey })(model);
+      : provider === "gemini"
+        ? createGoogle({ apiKey })(model)
+        : createAnthropic({ apiKey })(model);
 
   try {
     const { text } = await generateText({

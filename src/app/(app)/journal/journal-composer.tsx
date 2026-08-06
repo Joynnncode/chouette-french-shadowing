@@ -37,9 +37,9 @@ export function JournalComposer() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-ai-provider": settings?.provider ?? "anthropic",
+          "x-ai-provider": settings?.provider ?? "gemini",
           "x-ai-key": settings?.apiKey ?? "",
-          "x-ai-model": settings?.model ?? DEFAULT_MODELS.anthropic,
+          "x-ai-model": settings?.model ?? DEFAULT_MODELS.gemini,
         },
         body: JSON.stringify({ content }),
       });

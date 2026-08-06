@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-export type AiProvider = "anthropic" | "openai";
+export type AiProvider = "anthropic" | "openai" | "gemini";
 
 export type AiSettings = {
   provider: AiProvider;
@@ -13,6 +13,7 @@ const STORAGE_KEY = "chouette-ai-settings";
 export const DEFAULT_MODELS: Record<AiProvider, string> = {
   anthropic: "claude-sonnet-5",
   openai: "gpt-5.4-mini",
+  gemini: "gemini-3.6-flash",
 };
 
 export function loadAiSettings(): AiSettings | null {
