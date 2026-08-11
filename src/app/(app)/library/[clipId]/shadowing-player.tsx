@@ -227,29 +227,34 @@ export function ShadowingPlayer({
           {transcript.length === 0 ? (
             <RecordingHistory clipId={clipId} recordings={recordings} />
           ) : (
-            <div className="flex flex-col gap-1">
-              {transcript.map((line, i) => (
-                <button
-                  key={i}
-                  ref={i === activeIndex ? activeLineRef : undefined}
-                  onClick={() => seekTo(line.start)}
-                  className={cn(
-                    "rounded-md px-2 py-1.5 text-left text-sm leading-relaxed transition-colors",
-                    i === activeIndex
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent/50",
-                  )}
-                >
-                  {line.text.split(/(\s+)/).map((word, wi) =>
-                    word.trim() ? (
-                      <WordTapper key={wi} word={word} context={line.text} clipId={clipId} />
-                    ) : (
-                      <span key={wi}>{word}</span>
-                    ),
-                  )}
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="flex flex-col gap-1">
+                {transcript.map((line, i) => (
+                  <button
+                    key={i}
+                    ref={i === activeIndex ? activeLineRef : undefined}
+                    onClick={() => seekTo(line.start)}
+                    className={cn(
+                      "rounded-md px-2 py-1.5 text-left text-sm leading-relaxed transition-colors",
+                      i === activeIndex
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:bg-accent/50",
+                    )}
+                  >
+                    {line.text.split(/(\s+)/).map((word, wi) =>
+                      word.trim() ? (
+                        <WordTapper key={wi} word={word} context={line.text} clipId={clipId} />
+                      ) : (
+                        <span key={wi}>{word}</span>
+                      ),
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 border-t border-border pt-3">
+                <RecordingHistory clipId={clipId} recordings={recordings} />
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
