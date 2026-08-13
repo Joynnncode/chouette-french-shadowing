@@ -109,10 +109,14 @@ export function AddClipDialog() {
                     id="transcript"
                     name="transcript"
                     placeholder={
-                      "Paste the French transcript here, one line per sentence.\nWe'll try to fetch captions automatically first — YouTube often blocks that, so pasting your own is the reliable option."
+                      "Leave this empty to try YouTube's captions first.\nOr paste your own — line breaks mid-sentence are fine, we split it into sentences."
                     }
                     className="min-h-28"
                   />
+                  <p className="text-xs leading-snug text-muted-foreground">
+                    Best paste: the video&apos;s ⋯ menu → <strong>Show transcript</strong>, select
+                    all, paste here. The timestamps come across and become the real timings.
+                  </p>
                 </div>
                 {error && <p className="text-sm text-destructive">{error}</p>}
               </div>
@@ -162,7 +166,7 @@ export function AddClipDialog() {
                   <Textarea
                     id="audioTranscript"
                     name="transcript"
-                    placeholder="Paste the French transcript here, one line per sentence — this is what lets you tap words to save vocabulary."
+                    placeholder="Paste the French transcript here — we split it into sentences for you. This is what lets you tap words to save vocabulary."
                     className="min-h-28"
                   />
                 </div>

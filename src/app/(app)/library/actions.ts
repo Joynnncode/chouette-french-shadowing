@@ -10,9 +10,9 @@ import {
   extractYoutubeVideoId,
   getTranscript,
   getVideoInfo,
-  parseManualTranscript,
   parseTimestamp,
 } from "@/lib/youtube";
+import { applyTimings, parseManualTranscript } from "@/lib/transcript";
 
 export async function addClipAction(formData: FormData) {
   const session = await auth();
@@ -42,7 +42,7 @@ export async function addClipAction(formData: FormData) {
 
   const manualTranscript = String(formData.get("transcript") ?? "").trim();
   const transcript = manualTranscript
-    ? parseManualTranscript(manualTranscript, 4, startSeconds)
+    ? parseManualTranscript(manualTranscript, { startOffset: startSeconds })
     : await getTranscript(videoId).catch(() => null);
 
   await db.insert(clips).values({
@@ -89,7 +89,7 @@ export async function addAudioClipAction(formData: FormData) {
   });
 
   const manualTranscript = String(formData.get("transcript") ?? "").trim();
-  const transcript = manualTranscript ? parseManualTranscript(manualTranscript, 4, 0) : null;
+  const transcript = manualTranscript ? parseManualTranscript(manualTranscript) : null;
 
   await db.insert(clips).values({
     audioUrl: blob.url,
@@ -110,9 +110,55 @@ export async function updateTranscriptAction(clipId: string, formData: FormData)
 
   const raw = String(formData.get("transcript") ?? "").trim();
   const startSeconds = Number(formData.get("startSeconds") ?? 0) || 0;
-  const transcript = raw ? parseManualTranscript(raw, 4, startSeconds) : null;
+  const transcript = raw ? parseManualTranscript(raw, { startOffset: startSeconds }) : null;
 
   await db.update(clips).set({ transcript }).where(eq(clips.id, clipId));
+
+  revalidatePath(`/library/${clipId}`);
+}
+
+/**
+ * Retries YouTube's captions for a clip that was added without a transcript —
+ * the fetch is blocked often enough that it's worth a manual second go, and
+ * auto-generated captions come with real timings, unlike a pasted transcript.
+ */
+export async function fetchCaptionsAction(clipId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  const clip = await db.query.clips.findFirst({ where: eq(clips.id, clipId) });
+  if (!clip) return { error: "That clip is gone." };
+  if (!clip.youtubeVideoId) return { error: "This clip isn't a YouTube video." };
+
+  const transcript = await getTranscript(clip.youtubeVideoId).catch(() => null);
+  if (!transcript?.length) {
+    return { error: "YouTube didn't hand over captions for this video." };
+  }
+
+  await db.update(clips).set({ transcript }).where(eq(clips.id, clipId));
+  revalidatePath(`/library/${clipId}`);
+  return { error: null };
+}
+
+/**
+ * Writes the real line start times captured by tapping along with the clip.
+ * Only the timings travel from the client — the text stays whatever is already
+ * stored, so a stale open tab can't rewrite the transcript.
+ */
+export async function updateTranscriptTimingsAction(clipId: string, starts: (number | null)[]) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  const clip = await db.query.clips.findFirst({ where: eq(clips.id, clipId) });
+  if (!clip?.transcript?.length) throw new Error("This clip has no transcript to sync");
+  if (starts.length !== clip.transcript.length) {
+    throw new Error("The transcript changed while you were syncing — reload and try again");
+  }
+
+  await db
+    .update(clips)
+    .set({ transcript: applyTimings(clip.transcript, starts) })
+    .where(eq(clips.id, clipId));
 
   revalidatePath(`/library/${clipId}`);
 }

@@ -29,14 +29,27 @@ import {
   Volume1,
   Volume2,
   Languages,
+  Timer,
+  Undo2,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { addVocabularyAction } from "../../vocabulary/actions";
 import { uploadRecordingAction, deleteRecordingAction } from "./recordings-actions";
-import { updateTranscriptAction } from "../actions";
+import {
+  fetchCaptionsAction,
+  updateTranscriptAction,
+  updateTranscriptTimingsAction,
+} from "../actions";
 
 type TranscriptLine = { start: number; dur: number; text: string };
 type Recording = { id: string; url: string; createdAt: Date };
+
+/**
+ * Taps land a moment after the line actually starts, so every tapped time is
+ * pulled back by this much. Roughly the median human reaction time.
+ */
+const TAP_LATENCY_SECONDS = 0.25;
 
 declare global {
   interface Window {
@@ -108,17 +121,77 @@ export function ShadowingPlayer({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
+  // Tap-along timing capture. `taps[i]` is the real start of line i, or null
+  // while it hasn't been tapped yet; `cursor` is the line awaiting a tap.
+  const [syncing, setSyncing] = useState(false);
+  const [taps, setTaps] = useState<(number | null)[]>([]);
+  const [cursor, setCursor] = useState(0);
+  const [savingTimings, setSavingTimings] = useState(false);
+
   function getCurrentTime(): number {
     if (youtubeVideoId) return playerRef.current?.getCurrentTime() ?? 0;
     return sourceAudioRef.current?.currentTime ?? 0;
   }
 
+  function play() {
+    if (youtubeVideoId) playerRef.current?.playVideo();
+    else sourceAudioRef.current?.play();
+  }
+
+  function pause() {
+    if (youtubeVideoId) playerRef.current?.pauseVideo();
+    else sourceAudioRef.current?.pause();
+  }
+
   function seekTo(seconds: number) {
     if (youtubeVideoId) {
       playerRef.current?.seekTo(seconds, true);
+      playerRef.current?.playVideo();
     } else if (sourceAudioRef.current) {
       sourceAudioRef.current.currentTime = seconds;
       sourceAudioRef.current.play();
+    }
+  }
+
+  function startSync() {
+    setTaps(Array(transcript.length).fill(null));
+    setCursor(0);
+    setSyncing(true);
+    seekTo(startSeconds);
+  }
+
+  /** Stamps the playhead as the start of the line under the cursor. */
+  function tap() {
+    if (cursor >= transcript.length) return;
+    const at = Math.max(0, getCurrentTime() - TAP_LATENCY_SECONDS);
+    setTaps((prev) => prev.map((value, i) => (i === cursor ? at : value)));
+    if (cursor + 1 >= transcript.length) pause();
+    setCursor(cursor + 1);
+  }
+
+  /** Drops the last tap and rewinds there, so a mistimed line can be redone. */
+  function undoTap() {
+    if (cursor === 0) return;
+    retapFrom(cursor - 1);
+  }
+
+  function retapFrom(index: number) {
+    setTaps((prev) => prev.map((value, i) => (i >= index ? null : value)));
+    setCursor(index);
+    seekTo(taps[index - 1] ?? startSeconds);
+  }
+
+  async function saveTimings() {
+    setSavingTimings(true);
+    try {
+      await updateTranscriptTimingsAction(clipId, taps);
+      router.refresh();
+      setSyncing(false);
+      toast.success("Timings saved");
+    } catch {
+      toast.error("Couldn't save the timings.");
+    } finally {
+      setSavingTimings(false);
     }
   }
 
@@ -138,8 +211,10 @@ export function ShadowingPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [youtubeVideoId]);
 
+  // While syncing, the cursor leads the transcript instead of the clock —
+  // following the (still wrong) stored timings would fight the person tapping.
   useEffect(() => {
-    if (!transcript.length) return;
+    if (!transcript.length || syncing) return;
     const interval = setInterval(() => {
       const t = getCurrentTime();
       let idx = -1;
@@ -150,11 +225,39 @@ export function ShadowingPlayer({
     }, 300);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transcript]);
+  }, [transcript, syncing]);
+
+  useEffect(() => {
+    if (!syncing) return;
+    function onKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target && (/^(INPUT|TEXTAREA)$/.test(target.tagName) || target.isContentEditable)) return;
+
+      // Captured and cancelled before it reaches whatever button has focus:
+      // Space would otherwise also activate that button, tapping twice or
+      // hitting Save by accident.
+      if (event.code === "Space") {
+        event.preventDefault();
+        event.stopPropagation();
+        tap();
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        event.stopPropagation();
+        undoTap();
+      } else if (event.key === "Escape") {
+        setSyncing(false);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncing, cursor, taps]);
+
+  const highlightIndex = syncing ? cursor : activeIndex;
 
   useEffect(() => {
     activeLineRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [activeIndex]);
+  }, [highlightIndex]);
 
   async function startRecording() {
     try {
@@ -231,13 +334,60 @@ export function ShadowingPlayer({
 
       <Card className="lg:col-span-2">
         <CardContent className="flex max-h-[32rem] flex-col gap-3 overflow-y-auto py-4">
-          <div className="sticky top-0 z-10 -mt-1 flex items-center justify-between bg-card pt-1">
-            <p className="text-xs font-medium text-muted-foreground">Transcript</p>
-            <EditTranscriptDialog
-              clipId={clipId}
-              startSeconds={startSeconds}
-              transcript={transcript}
-            />
+          <div className="sticky top-0 z-10 -mt-1 flex flex-col gap-2 bg-card pt-1">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground">Transcript</p>
+              {syncing ? (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setSyncing(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={saveTimings}
+                    disabled={savingTimings || taps.every((tap) => tap === null)}
+                  >
+                    {savingTimings ? "Saving…" : "Save timings"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  {youtubeVideoId && <FetchCaptionsButton clipId={clipId} />}
+                  {transcript.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2 text-xs"
+                      onClick={startSync}
+                    >
+                      <Timer className="h-3.5 w-3.5" />
+                      Sync timings
+                    </Button>
+                  )}
+                  <EditTranscriptDialog
+                    clipId={clipId}
+                    startSeconds={startSeconds}
+                    transcript={transcript}
+                  />
+                </div>
+              )}
+            </div>
+            {syncing && (
+              <SyncBar
+                cursor={cursor}
+                total={transcript.length}
+                onTap={tap}
+                onUndo={undoTap}
+                onPlay={play}
+                onPause={pause}
+              />
+            )}
           </div>
           {transcript.length === 0 ? (
             <RecordingHistory clipId={clipId} recordings={recordings} />
@@ -247,28 +397,39 @@ export function ShadowingPlayer({
                 {transcript.map((line, i) => (
                   <button
                     key={i}
-                    ref={i === activeIndex ? activeLineRef : undefined}
-                    onClick={() => seekTo(line.start)}
+                    ref={i === highlightIndex ? activeLineRef : undefined}
+                    onClick={() => (syncing ? retapFrom(i) : seekTo(line.start))}
                     className={cn(
                       "rounded-md px-2 py-1.5 text-left text-sm leading-relaxed transition-colors",
-                      i === activeIndex
+                      i === highlightIndex
                         ? "bg-accent text-accent-foreground"
                         : "text-muted-foreground hover:bg-accent/50",
+                      syncing && i > cursor && "opacity-60",
                     )}
                   >
-                    {line.text.split(/(\s+)/).map((word, wi) =>
-                      word.trim() ? (
-                        <WordTapper
-                          key={wi}
-                          word={word}
-                          context={line.text}
-                          clipId={clipId}
-                          aiEnabled={hasAiKey}
-                        />
-                      ) : (
-                        <span key={wi}>{word}</span>
-                      ),
+                    {syncing && (
+                      <span className="mr-2 font-mono text-xs text-muted-foreground">
+                        {taps[i] === null || taps[i] === undefined
+                          ? "--:--"
+                          : formatClock(taps[i] as number)}
+                      </span>
                     )}
+                    {/* Word popovers would swallow the click that re-taps a line. */}
+                    {syncing
+                      ? line.text
+                      : line.text.split(/(\s+)/).map((word, wi) =>
+                          word.trim() ? (
+                            <WordTapper
+                              key={wi}
+                              word={word}
+                              context={line.text}
+                              clipId={clipId}
+                              aiEnabled={hasAiKey}
+                            />
+                          ) : (
+                            <span key={wi}>{word}</span>
+                          ),
+                        )}
                   </button>
                 ))}
               </div>
@@ -279,6 +440,114 @@ export function ShadowingPlayer({
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * Retries YouTube's own captions. Worth offering on every YouTube clip: the
+ * fetch is blocked often enough that the first attempt at add-time regularly
+ * comes back empty, and captions arrive with real timings.
+ */
+function FetchCaptionsButton({ clipId }: { clipId: string }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  function fetchCaptions() {
+    startTransition(async () => {
+      try {
+        const result = await fetchCaptionsAction(clipId);
+        if (result?.error) {
+          toast.error(result.error, {
+            description: "Open the video on YouTube, click ⋯ → Show transcript, copy it, and paste it in with Edit — the timestamps come across too.",
+          });
+          return;
+        }
+        router.refresh();
+        toast.success("Captions loaded from YouTube");
+      } catch {
+        toast.error("Couldn't reach YouTube.");
+      }
+    });
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-7 gap-1.5 px-2 text-xs"
+      onClick={fetchCaptions}
+      disabled={isPending}
+    >
+      <Download className="h-3.5 w-3.5" />
+      {isPending ? "Fetching…" : "Fetch captions"}
+    </Button>
+  );
+}
+
+/** mm:ss.s — precise enough to see a tap land, short enough to sit inline. */
+function formatClock(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds - minutes * 60;
+  return `${minutes}:${rest.toFixed(1).padStart(4, "0")}`;
+}
+
+/**
+ * The controls for a tap-along pass. Space is the primary input, but a
+ * YouTube iframe eats key events once it has focus, so the same action is
+ * always one click away here.
+ */
+function SyncBar({
+  cursor,
+  total,
+  onTap,
+  onUndo,
+  onPlay,
+  onPause,
+}: {
+  cursor: number;
+  total: number;
+  onTap: () => void;
+  onUndo: () => void;
+  onPlay: () => void;
+  onPause: () => void;
+}) {
+  const done = cursor >= total;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-primary/40 bg-primary/5 p-2">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>
+          {done ? "All lines timed" : `Line ${cursor + 1} of ${total}`}
+        </span>
+        <span className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onPlay}>
+            <Play className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onPause}>
+            <Pause className="h-3.5 w-3.5" />
+          </Button>
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button size="sm" className="h-8 flex-1 text-xs" onClick={onTap} disabled={done}>
+          {done ? "Done — save the timings" : "Tap when this line starts (Space)"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 px-2 text-xs"
+          onClick={onUndo}
+          disabled={cursor === 0}
+        >
+          <Undo2 className="h-3.5 w-3.5" />
+          Back
+        </Button>
+      </div>
+      <p className="text-[11px] leading-snug text-muted-foreground">
+        Play the clip and tap as each line begins — Space to tap, ← to redo the last one, or click
+        any line to start again from there. Untapped lines keep their estimated timing.
+      </p>
     </div>
   );
 }
@@ -585,14 +854,19 @@ function EditTranscriptDialog({
           <DialogHeader>
             <DialogTitle>{transcript.length ? "Edit transcript" : "Add transcript"}</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
+          <div className="flex flex-col gap-2 py-4">
             <input type="hidden" name="startSeconds" value={startSeconds} />
             <Textarea
               name="transcript"
               defaultValue={initialText}
-              placeholder="One line per sentence…"
+              placeholder="Paste the transcript — we split it into sentences on save…"
               className="min-h-56"
             />
+            <p className="text-xs leading-snug text-muted-foreground">
+              On YouTube, open the video&apos;s ⋯ menu → <strong>Show transcript</strong>, select it
+              all and paste it here: the timestamps come with it and become the real timings, so
+              there&apos;s nothing left to sync. Plain text works too — .srt and .vtt files as well.
+            </p>
           </div>
           <DialogFooter>
             <Button type="submit" disabled={isPending}>

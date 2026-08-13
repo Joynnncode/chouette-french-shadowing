@@ -1,3 +1,5 @@
+import { mergeCaptionLines, type TranscriptLine } from "./transcript";
+
 export function extractYoutubeVideoId(input: string): string | null {
   const trimmed = input.trim();
   if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
@@ -33,76 +35,146 @@ export async function getVideoInfo(videoId: string): Promise<{
   return { title: data.title as string, channelName: (data.author_name as string) ?? null };
 }
 
-export type TranscriptLine = { start: number; dur: number; text: string };
+export type { TranscriptLine } from "./transcript";
+
+type CaptionTrack = { baseUrl: string; languageCode: string; kind?: string };
+
+/** The public InnerTube key YouTube's own web player ships with. */
+const INNERTUBE_KEY = "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w";
 
 /**
- * Best-effort transcript fetch via YouTube's public timedtext endpoint. As of
- * mid-2026 YouTube blocks most non-browser requests to this endpoint (empty
- * body, HTTP 200), so this frequently returns null — callers should treat
- * that as normal and fall back to a manually pasted transcript instead of
- * retrying with spoofed headers or tokens.
+ * Caption track list via InnerTube. The watch page still lists the tracks, but
+ * the baseUrls it hands out now answer 200 with an empty body — they need a
+ * proof-of-origin token the page's JS mints. The mobile clients are exempt, so
+ * their baseUrls actually return captions. YouTube may still refuse from a
+ * datacenter IP, hence every caller treating null as normal.
+ */
+async function fetchCaptionTracks(videoId: string): Promise<CaptionTrack[]> {
+  for (const client of [
+    { clientName: "IOS", clientVersion: "20.10.4" },
+    { clientName: "ANDROID", clientVersion: "20.10.38", androidSdkVersion: 30 },
+  ]) {
+    try {
+      const res = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoId,
+          context: { client: { ...client, hl: "fr", gl: "FR" } },
+        }),
+      });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const tracks: CaptionTrack[] =
+        json?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
+      if (tracks.length) return tracks;
+    } catch {
+      // Try the next client.
+    }
+  }
+  return [];
+}
+
+const HTML_ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&nbsp;": " ",
+};
+
+function decodeEntities(text: string): string {
+  // Twice: YouTube's XML double-encodes apostrophes as &amp;#39;.
+  const once = text.replace(/&#(\d+);|&[a-z]+;/gi, (match, code) =>
+    code ? String.fromCharCode(Number(code)) : (HTML_ENTITIES[match.toLowerCase()] ?? match),
+  );
+  return once.replace(/&#(\d+);|&[a-z]+;/gi, (match, code) =>
+    code ? String.fromCharCode(Number(code)) : (HTML_ENTITIES[match.toLowerCase()] ?? match),
+  );
+}
+
+/**
+ * Caption bodies come back in three shapes depending on which client's baseUrl
+ * we ended up with: json3, the `<transcript><text>` XML, or timedtext v3
+ * `<p t= d=>` XML.
+ */
+/** "[Musique]", "[Applaudissements]", "♪♪♪" — nothing to shadow. */
+function isSoundEffectCue(text: string): boolean {
+  return !text.replace(/\[[^\]]*\]|[♪♫\s]+/g, "");
+}
+
+function parseCaptionBody(body: string): TranscriptLine[] {
+  const lines: TranscriptLine[] = [];
+
+  if (body.trimStart().startsWith("{")) {
+    const json = JSON.parse(body);
+    for (const event of json.events ?? []) {
+      if (!event.segs) continue;
+      const text = event.segs
+        .map((seg: { utf8?: string }) => seg.utf8 ?? "")
+        .join("")
+        .trim();
+      if (!text || isSoundEffectCue(text)) continue;
+      lines.push({
+        start: (event.tStartMs ?? 0) / 1000,
+        dur: (event.dDurationMs ?? 2000) / 1000,
+        text,
+      });
+    }
+    return lines;
+  }
+
+  for (const match of body.matchAll(
+    /<(?:text|p)\b[^>]*\b(?:start|t)="([\d.]+)"[^>]*?(?:\b(?:dur|d)="([\d.]+)")?[^>]*>([\s\S]*?)<\/(?:text|p)>/g,
+  )) {
+    // `t`/`d` are milliseconds in timedtext v3, seconds in the legacy format.
+    const isMilliseconds = /<p\b/.test(match[0]);
+    const text = decodeEntities(match[3].replace(/<[^>]+>/g, "")).trim();
+    if (!text || isSoundEffectCue(text)) continue;
+    lines.push({
+      start: Number(match[1]) / (isMilliseconds ? 1000 : 1),
+      dur: (match[2] ? Number(match[2]) : 2000) / (isMilliseconds ? 1000 : 1),
+      text,
+    });
+  }
+  return lines;
+}
+
+/**
+ * Best-effort transcript fetch. Auto-generated ("asr") tracks count — they are
+ * often all a learner video has — but a human-written track in the target
+ * language wins when both exist. Caption events are cut to fit the caption box
+ * rather than at sentence ends, so they get merged back into sentences.
+ * Returns null whenever YouTube declines, which callers treat as normal.
  */
 export async function getTranscript(
   videoId: string,
   preferredLang = "fr",
 ): Promise<TranscriptLine[] | null> {
-  const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-    headers: { "Accept-Language": "en-US,en;q=0.9" },
-  });
-  if (!pageRes.ok) return null;
-  const html = await pageRes.text();
+  const tracks = await fetchCaptionTracks(videoId);
+  if (!tracks.length) return null;
 
-  const match = html.match(/"captionTracks":(\[.*?\])/);
-  if (!match) return null;
+  const inLanguage = tracks.filter(
+    (t) => t.languageCode === preferredLang || t.languageCode?.startsWith(`${preferredLang}-`),
+  );
+  // A transcript in the wrong language is worse than none here, so anything
+  // else only counts when the video ships a single track (its own language).
+  const track =
+    inLanguage.find((t) => t.kind !== "asr") ??
+    inLanguage[0] ??
+    (tracks.length === 1 ? tracks[0] : undefined);
+  if (!track?.baseUrl) return null;
 
-  let tracks: { baseUrl: string; languageCode: string; kind?: string }[];
   try {
-    tracks = JSON.parse(match[1].replace(/\\u0026/g, "&"));
+    const res = await fetch(`${track.baseUrl}&fmt=json3`);
+    if (!res.ok) return null;
+    const body = await res.text();
+    const events = parseCaptionBody(body);
+    return events.length ? mergeCaptionLines(events) : null;
   } catch {
     return null;
   }
-  if (!tracks.length) return null;
-
-  const track =
-    tracks.find((t) => t.languageCode === preferredLang) ??
-    tracks.find((t) => t.languageCode?.startsWith(preferredLang)) ??
-    tracks[0];
-  if (!track) return null;
-
-  const ttRes = await fetch(`${track.baseUrl}&fmt=json3`);
-  if (!ttRes.ok) return null;
-  const ttJson = await ttRes.json();
-
-  const events: TranscriptLine[] = [];
-  for (const ev of ttJson.events ?? []) {
-    if (!ev.segs) continue;
-    const text = ev.segs.map((s: { utf8: string }) => s.utf8).join("").trim();
-    if (!text) continue;
-    events.push({
-      start: (ev.tStartMs ?? 0) / 1000,
-      dur: (ev.dDurationMs ?? 2000) / 1000,
-      text,
-    });
-  }
-  return events.length ? events : null;
-}
-
-/**
- * Turns a manually pasted transcript (one line per subtitle/sentence) into
- * TranscriptLine[] with evenly spaced approximate timestamps. Used when
- * automatic caption fetching fails or a clip has no official captions.
- * `startOffset` shifts every line so it lines up with a clip's start time.
- */
-export function parseManualTranscript(
-  raw: string,
-  secondsPerLine = 4,
-  startOffset = 0,
-): TranscriptLine[] {
-  return raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((text, i) => ({ start: startOffset + i * secondsPerLine, dur: secondsPerLine, text }));
 }
 
 /** Parses "1:45", "0:05", or a bare seconds string like "105" into seconds. */
