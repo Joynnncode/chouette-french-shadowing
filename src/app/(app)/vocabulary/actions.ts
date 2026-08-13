@@ -10,6 +10,7 @@ export async function addVocabularyAction(input: {
   word: string;
   context?: string;
   clipId?: string;
+  translation?: string;
 }) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not signed in");
@@ -22,6 +23,7 @@ export async function addVocabularyAction(input: {
     word,
     context: input.context ?? null,
     clipId: input.clipId ?? null,
+    translation: input.translation?.trim() || null,
   });
 
   revalidatePath("/vocabulary");

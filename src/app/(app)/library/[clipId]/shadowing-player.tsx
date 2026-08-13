@@ -16,7 +16,20 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Mic, Square, Play, Pause, Trash2, Pencil } from "lucide-react";
+import { normalizeFrenchWord, type DictionaryResult } from "@/lib/dictionary";
+import { loadAiSettings, useHasAiKey } from "@/lib/ai-settings";
+import { speak } from "@/lib/speech";
+import {
+  Mic,
+  Square,
+  Play,
+  Pause,
+  Trash2,
+  Pencil,
+  Volume1,
+  Volume2,
+  Languages,
+} from "lucide-react";
 import { toast } from "sonner";
 import { addVocabularyAction } from "../../vocabulary/actions";
 import { uploadRecordingAction, deleteRecordingAction } from "./recordings-actions";
@@ -85,6 +98,8 @@ export function ShadowingPlayer({
   const sourceAudioRef = useRef<HTMLAudioElement>(null);
   const activeLineRef = useRef<HTMLButtonElement>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
+  // Subscribed once here rather than in every WordTapper.
+  const hasAiKey = useHasAiKey();
 
   const router = useRouter();
   const [isRecording, setIsRecording] = useState(false);
@@ -243,7 +258,13 @@ export function ShadowingPlayer({
                   >
                     {line.text.split(/(\s+)/).map((word, wi) =>
                       word.trim() ? (
-                        <WordTapper key={wi} word={word} context={line.text} clipId={clipId} />
+                        <WordTapper
+                          key={wi}
+                          word={word}
+                          context={line.text}
+                          clipId={clipId}
+                          aiEnabled={hasAiKey}
+                        />
                       ) : (
                         <span key={wi}>{word}</span>
                       ),
@@ -266,18 +287,26 @@ function WordTapper({
   word,
   context,
   clipId,
+  aiEnabled,
 }: {
   word: string;
   context: string;
   clipId: string;
+  aiEnabled: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(word.replace(/[.,!?;:«»"']/g, ""));
+  const [value, setValue] = useState(() => normalizeFrenchWord(word) || word);
   const [saving, setSaving] = useState(false);
+  const lookup = useWordLookup(value, context, open, aiEnabled);
 
   async function save() {
     setSaving(true);
-    await addVocabularyAction({ word: value, context, clipId });
+    await addVocabularyAction({
+      word: value,
+      context,
+      clipId,
+      translation: buildTranslation(lookup),
+    });
     setSaving(false);
     setOpen(false);
     toast.success(`Saved "${value}"`);
@@ -296,17 +325,224 @@ function WordTapper({
           {word}
         </span>
       </PopoverTrigger>
-      <PopoverContent className="w-64" onClick={(e) => e.stopPropagation()}>
-        <div className="flex flex-col gap-2">
-          <p className="text-xs text-muted-foreground">Save to your vocabulary list</p>
-          <Input value={value} onChange={(e) => setValue(e.target.value)} />
-          <Button size="sm" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save word"}
-          </Button>
+      <PopoverContent
+        className="max-h-[70vh] w-80 overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex flex-col gap-3">
+          <WordDefinition lookup={lookup} word={value} />
+          <div className="flex flex-col gap-2 border-t border-border pt-3">
+            <p className="text-xs text-muted-foreground">Save to your vocabulary list</p>
+            <Input value={value} onChange={(e) => setValue(e.target.value)} />
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? "Saving…" : "Save word"}
+            </Button>
+          </div>
         </div>
       </PopoverContent>
     </Popover>
   );
+}
+
+type WordLookup = {
+  entry: DictionaryResult | null;
+  status: "idle" | "loading" | "done" | "missing" | "error";
+  ai: string | null;
+  aiStatus: "off" | "idle" | "loading" | "done" | "error";
+  requestAi: () => void;
+};
+
+/**
+ * Looks the tapped word up on Wiktionary. The Chinese gloss costs an AI
+ * round-trip, so it is only fetched when the learner asks for it — the
+ * dictionary entry itself should appear as soon as the popover opens.
+ * Results carry the word they belong to, so a result that hasn't caught up
+ * with an edited word still reads as "loading".
+ */
+function useWordLookup(
+  word: string,
+  context: string,
+  open: boolean,
+  aiKeyConfigured: boolean,
+): WordLookup {
+  const query = word.trim();
+  const [result, setResult] = useState<{
+    word: string;
+    entry: DictionaryResult | null;
+    status: "done" | "missing" | "error";
+  } | null>(null);
+  const [aiResult, setAiResult] = useState<{
+    word: string;
+    text: string | null;
+    status: "loading" | "done" | "error";
+  } | null>(null);
+
+  useEffect(() => {
+    if (!open || !query) return;
+
+    const controller = new AbortController();
+    fetch(`/api/dictionary?word=${encodeURIComponent(query)}`, { signal: controller.signal })
+      .then(async (res) => {
+        if (res.status === 404) {
+          setResult({ word: query, entry: null, status: "missing" });
+          return;
+        }
+        if (!res.ok) throw new Error(String(res.status));
+        const entry = (await res.json()) as DictionaryResult;
+        setResult({ word: query, entry, status: "done" });
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        console.error(err);
+        setResult({ word: query, entry: null, status: "error" });
+      });
+
+    return () => controller.abort();
+  }, [open, query]);
+
+  const settings = aiKeyConfigured ? loadAiSettings() : null;
+  const aiEnabled = !!settings?.apiKey;
+
+  function requestAi() {
+    if (!query || !settings?.apiKey) return;
+    setAiResult({ word: query, text: null, status: "loading" });
+
+    fetch("/api/dictionary/explain", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-ai-provider": settings.provider,
+        "x-ai-key": settings.apiKey,
+        "x-ai-model": settings.model,
+      },
+      body: JSON.stringify({ word: query, context }),
+    })
+      .then(async (res) => {
+        const json = (await res.json()) as { text?: string; error?: string };
+        if (!res.ok || !json.text) throw new Error(json.error ?? "AI lookup failed");
+        setAiResult({ word: query, text: json.text, status: "done" });
+      })
+      .catch((err) => {
+        console.error(err);
+        setAiResult({ word: query, text: null, status: "error" });
+      });
+  }
+
+  const current = result?.word === query ? result : null;
+  const currentAi = aiResult?.word === query ? aiResult : null;
+
+  return {
+    entry: current?.entry ?? null,
+    status: !open || !query ? "idle" : (current?.status ?? "loading"),
+    ai: currentAi?.text ?? null,
+    aiStatus: !aiEnabled ? "off" : (currentAi?.status ?? "idle"),
+    requestAi,
+  };
+}
+
+function WordDefinition({ lookup, word }: { lookup: WordLookup; word: string }) {
+  const { entry, status, ai, aiStatus, requestAi } = lookup;
+  const headword = entry?.lemma ?? entry?.query ?? word;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-1.5">
+        <span className="font-medium">{headword}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 shrink-0 text-muted-foreground"
+          onClick={() => speak(headword)}
+          aria-label={`Pronounce ${headword}`}
+        >
+          <Volume2 className="h-3.5 w-3.5" />
+        </Button>
+        {entry?.lemma && word !== entry.lemma && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 shrink-0 text-muted-foreground"
+            onClick={() => speak(word)}
+            aria-label={`Pronounce ${word} as written`}
+            title={`Pronounce "${word}"`}
+          >
+            <Volume1 className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+
+      {status === "loading" && (
+        <p className="text-xs text-muted-foreground">Looking the word up…</p>
+      )}
+
+      {status === "missing" && (
+        <p className="text-xs text-muted-foreground">
+          No dictionary entry found for this word.
+        </p>
+      )}
+
+      {status === "error" && (
+        <p className="text-xs text-muted-foreground">Couldn&apos;t reach the dictionary.</p>
+      )}
+
+      {entry && (
+        <>
+          {entry.inflectionNote && (
+            <p className="text-xs text-muted-foreground">{entry.inflectionNote}</p>
+          )}
+          {entry.senses.map((sense, i) => (
+            <div key={i} className="flex flex-col gap-0.5">
+              <p className="text-xs font-medium text-muted-foreground">{sense.partOfSpeech}</p>
+              <ol className="ml-4 list-decimal text-sm">
+                {sense.definitions.map((definition, j) => (
+                  <li key={j}>{definition}</li>
+                ))}
+              </ol>
+            </div>
+          ))}
+          <a
+            href={entry.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-muted-foreground underline underline-offset-2"
+          >
+            Wiktionary
+          </a>
+        </>
+      )}
+
+      {aiStatus === "idle" && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 self-start px-2 text-xs text-muted-foreground"
+          onClick={requestAi}
+        >
+          <Languages className="h-3.5 w-3.5" />
+          中文解释
+        </Button>
+      )}
+      {aiStatus === "loading" && (
+        <p className="text-xs text-muted-foreground">正在生成中文解释…</p>
+      )}
+      {aiStatus === "error" && (
+        <p className="text-xs text-muted-foreground">中文解释生成失败。</p>
+      )}
+      {ai && <p className="whitespace-pre-line border-t border-border pt-2 text-sm">{ai}</p>}
+    </div>
+  );
+}
+
+/** What gets stored on the vocabulary entry (and pushed to the Anki card's back). */
+function buildTranslation(lookup: WordLookup): string | undefined {
+  if (lookup.ai) return lookup.ai;
+  const entry = lookup.entry;
+  if (!entry) return undefined;
+  const senses = entry.senses
+    .map((sense) => `${sense.partOfSpeech}: ${sense.definitions.join("; ")}`)
+    .join("\n");
+  const header = entry.lemma ? `${entry.lemma} — ${entry.inflectionNote ?? ""}`.trim() : "";
+  return [header, senses].filter(Boolean).join("\n") || undefined;
 }
 
 function EditTranscriptDialog({

@@ -5,8 +5,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Check, Send, Trash2 } from "lucide-react";
+import { Check, Send, Trash2, Volume2 } from "lucide-react";
 import { toast } from "sonner";
+import { speak } from "@/lib/speech";
 import { deleteVocabularyAction, markSyncedAction } from "./actions";
 
 type VocabEntry = {
@@ -116,9 +117,18 @@ export function VocabularyList({ entries }: { entries: VocabEntry[] }) {
         {entries.map((entry) => (
           <Card key={entry.id}>
             <CardContent className="flex items-center justify-between gap-3 py-3">
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-col gap-1">
+                <div className="flex items-center gap-1.5">
                   <span className="font-medium">{entry.word}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0 text-muted-foreground"
+                    onClick={() => speak(entry.word)}
+                    aria-label={`Pronounce ${entry.word}`}
+                  >
+                    <Volume2 className="h-3.5 w-3.5" />
+                  </Button>
                   {entry.syncedToAnki && (
                     <Badge variant="secondary" className="gap-1">
                       <Check className="h-3 w-3" />
@@ -126,8 +136,13 @@ export function VocabularyList({ entries }: { entries: VocabEntry[] }) {
                     </Badge>
                   )}
                 </div>
+                {entry.translation ? (
+                  <p className="whitespace-pre-line text-sm">{entry.translation}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No definition found.</p>
+                )}
                 {entry.context && (
-                  <p className="truncate text-sm text-muted-foreground">{entry.context}</p>
+                  <p className="truncate text-xs text-muted-foreground">{entry.context}</p>
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-1">
