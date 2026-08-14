@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { CoverImageError, prepareCoverImage } from "@/lib/image";
 import { addClipAction, addAudioClipAction } from "./actions";
 
 export function AddClipDialog() {
@@ -34,6 +35,18 @@ export function AddClipDialog() {
     return (formData: FormData) => {
       setError(null);
       startTransition(async () => {
+        const picked = formData.get("cover");
+        if (picked instanceof File && picked.size > 0) {
+          try {
+            formData.set("cover", await prepareCoverImage(picked));
+          } catch (err) {
+            setError(
+              err instanceof CoverImageError ? err.message : "Couldn't read that cover image.",
+            );
+            return;
+          }
+        }
+
         const result = await action(formData);
         if (result?.error) {
           setError(result.error);

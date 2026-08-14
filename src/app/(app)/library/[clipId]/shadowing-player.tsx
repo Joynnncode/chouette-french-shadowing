@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { normalizeFrenchWord, type DictionaryResult } from "@/lib/dictionary";
+import { CoverImageError, prepareCoverImage } from "@/lib/image";
 import { loadAiSettings, useHasAiKey } from "@/lib/ai-settings";
 import { speak } from "@/lib/speech";
 import {
@@ -481,9 +482,10 @@ function CoverControls({ clipId, hasCover }: { clipId: string; hasCover: boolean
   const [isUploading, setIsUploading] = useState(false);
   const [isRemoving, startRemoving] = useTransition();
 
-  async function upload(file: File) {
+  async function upload(picked: File) {
     setIsUploading(true);
     try {
+      const file = await prepareCoverImage(picked);
       const formData = new FormData();
       formData.set("cover", file);
       const result = await updateClipCoverAction(clipId, formData);
@@ -493,8 +495,10 @@ function CoverControls({ clipId, hasCover }: { clipId: string; hasCover: boolean
       }
       router.refresh();
       toast.success("Cover saved");
-    } catch {
-      toast.error("Couldn't upload that cover.");
+    } catch (err) {
+      toast.error(
+        err instanceof CoverImageError ? err.message : "Couldn't upload that cover.",
+      );
     } finally {
       setIsUploading(false);
       // Lets the same file be picked again after a failure.

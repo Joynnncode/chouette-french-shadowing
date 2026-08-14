@@ -119,6 +119,12 @@ function validateCover(file: File): string | null {
   if (!file.type.startsWith("image/")) {
     return "That cover doesn't look like an image file.";
   }
+  // The browser converts these before upload; if one still arrives it would
+  // only render in Safari, so it's better to say so than to store a broken
+  // image.
+  if (/^image\/(heic|heif)/.test(file.type)) {
+    return "Most browsers can't display HEIC. Save the photo as a JPEG and try again.";
+  }
   if (file.size > MAX_COVER_BYTES) {
     return "That cover is bigger than 8 MB — pick a smaller image.";
   }
