@@ -46,6 +46,7 @@ export default async function ClipPage({
         clipId={clip.id}
         youtubeVideoId={clip.youtubeVideoId}
         audioUrl={clip.audioUrl}
+        coverUrl={clip.coverUrl}
         transcript={clip.transcript ?? []}
         startSeconds={clip.startSeconds}
         recordings={recordings}

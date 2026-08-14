@@ -83,16 +83,24 @@ export async function addAudioClipAction(formData: FormData) {
     return { error: "That file doesn't look like an audio file." };
   }
 
+  const cover = formData.get("cover");
+  const coverError = cover instanceof File && cover.size > 0 ? validateCover(cover) : null;
+  if (coverError) return { error: coverError };
+
   const blob = await put(`clip-audio/${session.user.id}/${crypto.randomUUID()}`, file, {
     access: "public",
     contentType: file.type,
   });
+
+  const coverUrl =
+    cover instanceof File && cover.size > 0 ? await uploadCover(cover, session.user.id) : null;
 
   const manualTranscript = String(formData.get("transcript") ?? "").trim();
   const transcript = manualTranscript ? parseManualTranscript(manualTranscript) : null;
 
   await db.insert(clips).values({
     audioUrl: blob.url,
+    coverUrl,
     title,
     channelName,
     level,
@@ -102,6 +110,57 @@ export async function addAudioClipAction(formData: FormData) {
 
   revalidatePath("/library");
   return { error: null };
+}
+
+/** Cover art is decoration, so keep it small enough to never eat the upload budget. */
+const MAX_COVER_BYTES = 8 * 1024 * 1024;
+
+function validateCover(file: File): string | null {
+  if (!file.type.startsWith("image/")) {
+    return "That cover doesn't look like an image file.";
+  }
+  if (file.size > MAX_COVER_BYTES) {
+    return "That cover is bigger than 8 MB — pick a smaller image.";
+  }
+  return null;
+}
+
+async function uploadCover(file: File, userId: string) {
+  const blob = await put(`clip-cover/${userId}/${crypto.randomUUID()}`, file, {
+    access: "public",
+    contentType: file.type,
+  });
+  return blob.url;
+}
+
+/** Sets (or replaces) the cover art on a clip that already exists. */
+export async function updateClipCoverAction(clipId: string, formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  const file = formData.get("cover");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Choose an image to upload." };
+  }
+  const invalid = validateCover(file);
+  if (invalid) return { error: invalid };
+
+  const coverUrl = await uploadCover(file, session.user.id);
+  await db.update(clips).set({ coverUrl }).where(eq(clips.id, clipId));
+
+  revalidatePath("/library");
+  revalidatePath(`/library/${clipId}`);
+  return { error: null };
+}
+
+export async function removeClipCoverAction(clipId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  await db.update(clips).set({ coverUrl: null }).where(eq(clips.id, clipId));
+
+  revalidatePath("/library");
+  revalidatePath(`/library/${clipId}`);
 }
 
 export async function updateTranscriptAction(clipId: string, formData: FormData) {

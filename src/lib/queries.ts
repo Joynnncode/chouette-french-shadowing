@@ -13,6 +13,7 @@ export async function getClips(level: string | null, userId: string) {
       id: clips.id,
       youtubeVideoId: clips.youtubeVideoId,
       audioUrl: clips.audioUrl,
+      coverUrl: clips.coverUrl,
       title: clips.title,
       channelName: clips.channelName,
       level: clips.level,

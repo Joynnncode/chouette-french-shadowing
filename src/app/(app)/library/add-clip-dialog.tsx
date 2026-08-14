@@ -162,6 +162,14 @@ export function AddClipDialog() {
                   <Input id="audio" name="audio" type="file" accept="audio/*" required />
                 </div>
                 <div className="flex flex-col gap-2">
+                  <Label htmlFor="cover">Cover image (optional)</Label>
+                  <Input id="cover" name="cover" type="file" accept="image/*" />
+                  <p className="text-xs leading-snug text-muted-foreground">
+                    An audio clip has no thumbnail of its own — pick a picture from your computer
+                    and it becomes the clip&apos;s cover. You can change it later.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2">
                   <Label htmlFor="audioTranscript">Transcript (optional)</Label>
                   <Textarea
                     id="audioTranscript"

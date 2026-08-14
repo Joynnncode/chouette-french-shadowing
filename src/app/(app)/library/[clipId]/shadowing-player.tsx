@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -33,14 +34,18 @@ import {
   Undo2,
   Download,
   AudioLines,
+  ImagePlus,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { addVocabularyAction } from "../../vocabulary/actions";
 import { uploadRecordingAction, deleteRecordingAction } from "./recordings-actions";
 import {
   fetchCaptionsAction,
+  removeClipCoverAction,
   updateTranscriptAction,
   updateTranscriptTimingsAction,
+  updateClipCoverAction,
 } from "../actions";
 
 type TranscriptLine = { start: number; dur: number; text: string };
@@ -96,6 +101,7 @@ export function ShadowingPlayer({
   clipId,
   youtubeVideoId,
   audioUrl,
+  coverUrl,
   transcript,
   startSeconds,
   recordings,
@@ -103,6 +109,7 @@ export function ShadowingPlayer({
   clipId: string;
   youtubeVideoId: string | null;
   audioUrl: string | null;
+  coverUrl: string | null;
   transcript: TranscriptLine[];
   startSeconds: number;
   recordings: Recording[];
@@ -305,8 +312,23 @@ export function ShadowingPlayer({
             <div ref={containerRef} className="h-full w-full" />
           </div>
         ) : (
-          <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 rounded-lg border border-border bg-muted p-6">
-            <audio ref={sourceAudioRef} src={audioUrl ?? undefined} controls className="w-full" />
+          <div className="relative flex aspect-video w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-lg border border-border bg-muted p-6">
+            {coverUrl && (
+              <Image
+                src={coverUrl}
+                alt=""
+                fill
+                sizes="(min-width: 1024px) 60vw, 100vw"
+                className="object-cover"
+              />
+            )}
+            <audio
+              ref={sourceAudioRef}
+              src={audioUrl ?? undefined}
+              controls
+              className={cn("relative w-full", coverUrl && "rounded-full bg-background/80")}
+            />
+            <CoverControls clipId={clipId} hasCover={!!coverUrl} />
           </div>
         )}
 
@@ -444,6 +466,88 @@ export function ShadowingPlayer({
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * Cover art for an uploaded audio clip, which has no thumbnail of its own.
+ * The picker sits over the artwork rather than in a dialog — swapping the
+ * picture is a one-tap thing, and there's nothing else to fill in.
+ */
+function CoverControls({ clipId, hasCover }: { clipId: string; hasCover: boolean }) {
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isRemoving, startRemoving] = useTransition();
+
+  async function upload(file: File) {
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.set("cover", file);
+      const result = await updateClipCoverAction(clipId, formData);
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+      router.refresh();
+      toast.success("Cover saved");
+    } catch {
+      toast.error("Couldn't upload that cover.");
+    } finally {
+      setIsUploading(false);
+      // Lets the same file be picked again after a failure.
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  function remove() {
+    startRemoving(async () => {
+      try {
+        await removeClipCoverAction(clipId);
+        router.refresh();
+        toast.success("Cover removed");
+      } catch {
+        toast.error("Couldn't remove the cover.");
+      }
+    });
+  }
+
+  return (
+    <div className="absolute right-2 top-2 flex items-center gap-1">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) upload(file);
+        }}
+      />
+      <Button
+        variant="secondary"
+        size="sm"
+        className="h-7 gap-1.5 px-2 text-xs shadow-sm"
+        onClick={() => inputRef.current?.click()}
+        disabled={isUploading}
+      >
+        <ImagePlus className="h-3.5 w-3.5" />
+        {isUploading ? "Uploading…" : hasCover ? "Change cover" : "Add cover"}
+      </Button>
+      {hasCover && (
+        <Button
+          variant="secondary"
+          size="icon"
+          className="h-7 w-7 shadow-sm"
+          onClick={remove}
+          disabled={isRemoving}
+          aria-label="Remove cover"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      )}
     </div>
   );
 }

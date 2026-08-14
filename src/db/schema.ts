@@ -76,6 +76,9 @@ export const clips = pgTable("clip", {
     .$defaultFn(() => crypto.randomUUID()),
   youtubeVideoId: text("youtube_video_id"),
   audioUrl: text("audio_url"),
+  // Learner-uploaded cover art. YouTube clips fall back to the video
+  // thumbnail; an uploaded audio clip has nothing to show without this.
+  coverUrl: text("cover_url"),
   title: text("title").notNull(),
   channelName: text("channel_name"),
   level: cefrLevel("level").notNull(),

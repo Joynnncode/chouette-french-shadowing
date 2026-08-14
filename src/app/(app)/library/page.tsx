@@ -51,7 +51,15 @@ export default async function LibraryPage({
             <Card key={clip.id} className="flex flex-col overflow-hidden pt-0">
               <Link href={`/library/${clip.id}`}>
                 <div className="relative flex aspect-video w-full items-center justify-center bg-muted">
-                  {clip.youtubeVideoId ? (
+                  {clip.coverUrl ? (
+                    <Image
+                      src={clip.coverUrl}
+                      alt={clip.title}
+                      fill
+                      sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                      className="object-cover"
+                    />
+                  ) : clip.youtubeVideoId ? (
                     <Image
                       src={`https://i.ytimg.com/vi/${clip.youtubeVideoId}/hqdefault.jpg`}
                       alt={clip.title}
