@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { BookmarkPlus, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import { toast } from "sonner";
 import { DEFAULT_MODELS, loadAiSettings, useHasAiKey } from "@/lib/ai-settings";
 import { saveJournalEntryAction } from "./actions";
-import { addErrorEntryAction } from "../notebook/actions";
 
 type Correction = { wrong: string; right: string; note: string };
 
@@ -56,16 +55,6 @@ export function JournalComposer() {
     }
   }
 
-  async function saveCorrection(c: Correction) {
-    await addErrorEntryAction({
-      originalText: c.wrong,
-      correction: c.right,
-      explanation: c.note,
-      source: "journal",
-    });
-    toast.success("Saved to error notebook");
-  }
-
   return (
     <div className="flex flex-col gap-4">
       {!hasKey && (
@@ -95,21 +84,11 @@ export function JournalComposer() {
             {result.feedback && <p className="text-sm">{result.feedback}</p>}
             {result.corrections.map((c, i) => (
               <Card key={i} className="border-primary/30">
-                <CardContent className="flex items-center justify-between gap-3 py-2 text-sm">
-                  <div>
-                    <span className="text-destructive line-through">{c.wrong}</span>
-                    <span className="mx-1 text-muted-foreground">&rarr;</span>
-                    <span className="font-medium text-primary">{c.right}</span>
-                    <p className="text-xs text-muted-foreground">{c.note}</p>
-                  </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => saveCorrection(c)}
-                    aria-label="Save to notebook"
-                  >
-                    <BookmarkPlus className="h-4 w-4" />
-                  </Button>
+                <CardContent className="py-2 text-sm">
+                  <span className="text-destructive line-through">{c.wrong}</span>
+                  <span className="mx-1 text-muted-foreground">&rarr;</span>
+                  <span className="font-medium text-primary">{c.right}</span>
+                  <p className="text-xs text-muted-foreground">{c.note}</p>
                 </CardContent>
               </Card>
             ))}

@@ -7,13 +7,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { Send, BookmarkPlus, Mic, Square, Volume2, VolumeX } from "lucide-react";
+import { Send, Mic, Square, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { DEFAULT_MODELS, loadAiSettings, useHasAiKey } from "@/lib/ai-settings";
 import { useSpeechRecognition, speak, stopSpeaking, isSpeechSynthesisSupported } from "@/lib/speech";
 import { AiSettingsDialog } from "@/components/ai-settings-dialog";
-import { addErrorEntryAction } from "../notebook/actions";
 
 type Correction = { wrong: string; right: string; note: string };
 
@@ -115,19 +114,14 @@ export default function PracticePage() {
     }
   }
 
-  async function saveCorrection(c: Correction) {
-    await addErrorEntryAction({ originalText: c.wrong, correction: c.right, explanation: c.note });
-    toast.success("Saved to error notebook");
-  }
-
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">AI Practice</h1>
           <p className="text-sm text-muted-foreground">
-            Tap the mic, speak in French, tap again to send. Replies are read aloud. Mistakes get
-            flagged so you can save them to your error notebook.
+            Tap the mic, speak in French, tap again to send. Replies are read aloud, and mistakes
+            get flagged inline as you go.
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -235,21 +229,11 @@ export default function PracticePage() {
                 </div>
                 {corrections.map((c, i) => (
                   <Card key={i} className="max-w-[85%] border-primary/30">
-                    <CardContent className="flex items-center justify-between gap-3 py-2 text-sm">
-                      <div>
-                        <span className="text-destructive line-through">{c.wrong}</span>
-                        <span className="mx-1 text-muted-foreground">&rarr;</span>
-                        <span className="font-medium text-primary">{c.right}</span>
-                        <p className="text-xs text-muted-foreground">{c.note}</p>
-                      </div>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => saveCorrection(c)}
-                        aria-label="Save to notebook"
-                      >
-                        <BookmarkPlus className="h-4 w-4" />
-                      </Button>
+                    <CardContent className="py-2 text-sm">
+                      <span className="text-destructive line-through">{c.wrong}</span>
+                      <span className="mx-1 text-muted-foreground">&rarr;</span>
+                      <span className="font-medium text-primary">{c.right}</span>
+                      <p className="text-xs text-muted-foreground">{c.note}</p>
                     </CardContent>
                   </Card>
                 ))}

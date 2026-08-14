@@ -63,7 +63,7 @@ export default async function Home() {
             <CardTitle className="text-base">AI conversation</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Practice speaking French with an AI tutor — mistakes go straight into your error notebook.
+            Practice speaking French with an AI tutor — mistakes get flagged inline as you chat.
           </CardContent>
         </Card>
         <Card>

@@ -12,7 +12,6 @@ import {
 import type { AdapterAccountType } from "next-auth/adapters";
 
 export const cefrLevel = pgEnum("cefr_level", ["A1", "A2", "B1", "B2"]);
-export const errorSource = pgEnum("error_source", ["ai_chat", "journal"]);
 
 // --- Auth.js tables ---
 
@@ -138,20 +137,6 @@ export const recordings = pgTable("recording", {
     .notNull()
     .references(() => clips.id, { onDelete: "cascade" }),
   url: text("url").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const errorNotebookEntries = pgTable("error_notebook_entry", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  source: errorSource("source").notNull(),
-  originalText: text("original_text").notNull(),
-  correction: text("correction").notNull(),
-  explanation: text("explanation"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -8,8 +8,7 @@ Learn French by shadowing real YouTube clips leveled A1–B2, practice conversat
 
 - **Leveled clip library** — A1/A2/B1/B2 YouTube clips embedded via the official player, ranked by community favorites
 - **Synced shadowing player** — line-by-line transcript synced to playback, record-yourself + playback comparison, tap any word to save it
-- **AI conversation practice** — bring your own Anthropic or OpenAI API key; mistakes get flagged inline and saved to your error notebook
-- **Error notebook** — every corrected mistake from AI practice, in one place
+- **AI conversation practice** — bring your own Anthropic or OpenAI API key; mistakes get flagged inline as you chat
 - **Vocabulary list** — words saved while shadowing, one-click sync to your own Anki deck via [AnkiConnect](https://ankiweb.net/shared/info/2055492159)
 - **Auth** — GitHub / Google sign-in, per-user data
 
