@@ -398,7 +398,16 @@ export async function setClipCollectionAction(clipId: string, collectionId: stri
     level = collection.level;
   }
 
-  // Land at the end of whatever group it's joining.
+  const position = await endOfGroup(collectionId, level);
+  await db.update(clips).set({ collectionId, level, position }).where(eq(clips.id, clipId));
+
+  revalidatePath("/library");
+  revalidatePath(`/library/${clipId}`);
+  return { error: null };
+}
+
+/** The position a clip should take to land last in the group it's joining. */
+async function endOfGroup(collectionId: string | null, level: Level) {
   const [{ next }] = await db
     .select({ next: sql<number>`coalesce(max(${clips.position}), -1) + 1` })
     .from(clips)
@@ -407,12 +416,36 @@ export async function setClipCollectionAction(clipId: string, collectionId: stri
         ? eq(clips.collectionId, collectionId)
         : and(isNull(clips.collectionId), eq(clips.level, level)),
     );
+  return next;
+}
 
-  await db.update(clips).set({ collectionId, level, position: next }).where(eq(clips.id, clipId));
+/**
+ * Re-levels a clip that was filed wrong. A collection sits at one level, so a
+ * clip leaving its level leaves its collection behind with it.
+ */
+export async function setClipLevelAction(clipId: string, level: Level) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+  if (!LEVELS.includes(level)) return { error: "Pick a valid level.", leftCollection: false };
+
+  const clip = await db.query.clips.findFirst({ where: eq(clips.id, clipId) });
+  if (!clip) return { error: "That clip is gone.", leftCollection: false };
+  if (clip.level === level) return { error: null, leftCollection: false };
+
+  let collectionId = clip.collectionId;
+  if (collectionId) {
+    const collection = await db.query.collections.findFirst({
+      where: eq(collections.id, collectionId),
+    });
+    if (collection?.level !== level) collectionId = null;
+  }
+
+  const position = await endOfGroup(collectionId, level);
+  await db.update(clips).set({ level, collectionId, position }).where(eq(clips.id, clipId));
 
   revalidatePath("/library");
   revalidatePath(`/library/${clipId}`);
-  return { error: null };
+  return { error: null, leftCollection: !!clip.collectionId && !collectionId };
 }
 
 export async function moveClipAction(clipId: string, direction: "up" | "down") {

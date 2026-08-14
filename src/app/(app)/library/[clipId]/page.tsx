@@ -46,6 +46,7 @@ export default async function ClipPage({
           <ClipMenu
             clipId={clip.id}
             title={clip.title}
+            level={clip.level}
             collectionId={clip.collectionId}
             collections={collections}
             showMove={false}

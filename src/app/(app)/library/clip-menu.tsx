@@ -23,16 +23,23 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowDown, ArrowUp, FolderInput, MoreHorizontal, Pencil } from "lucide-react";
+import { ArrowDown, ArrowUp, FolderInput, MoreHorizontal, Pencil, Signal } from "lucide-react";
 import { toast } from "sonner";
-import type { Collection } from "@/lib/queries";
-import { moveClipAction, renameClipAction, setClipCollectionAction } from "./actions";
+import type { Collection, Level } from "@/lib/queries";
+import {
+  moveClipAction,
+  renameClipAction,
+  setClipCollectionAction,
+  setClipLevelAction,
+} from "./actions";
 
 const NONE = "none";
+const LEVELS = ["A1", "A2", "B1", "B2"] as const;
 
 export function ClipMenu({
   clipId,
   title,
+  level,
   collectionId,
   collections,
   canMoveUp = false,
@@ -41,6 +48,7 @@ export function ClipMenu({
 }: {
   clipId: string;
   title: string;
+  level: Level;
   collectionId: string | null;
   collections: Collection[];
   canMoveUp?: boolean;
@@ -84,6 +92,22 @@ export function ClipMenu({
     });
   }
 
+  function handleLevel(value: string) {
+    if (value === level) return;
+    startTransition(async () => {
+      const result = await setClipLevelAction(clipId, value as Level);
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(
+        result.leftCollection
+          ? `Now ${value} — it left its collection, which is a different level`
+          : `Now ${value}`,
+      );
+    });
+  }
+
   return (
     <>
       <DropdownMenu>
@@ -111,6 +135,21 @@ export function ClipMenu({
             </>
           )}
           <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Signal className="h-4 w-4" />
+              Level
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuRadioGroup value={level} onValueChange={handleLevel}>
+                {LEVELS.map((option) => (
+                  <DropdownMenuRadioItem key={option} value={option}>
+                    {option}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               <FolderInput className="h-4 w-4" />

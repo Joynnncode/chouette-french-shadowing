@@ -64,6 +64,7 @@ export function ClipCard({
           <ClipMenu
             clipId={clip.id}
             title={clip.title}
+            level={clip.level}
             collectionId={clip.collectionId}
             collections={collections}
             canMoveUp={canMoveUp}
