@@ -1,11 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { put } from "@vercel/blob";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { clips, favorites } from "@/db/schema";
+import { clips, collections, favorites } from "@/db/schema";
+import { getOrderedClipIds } from "@/lib/queries";
 import {
   extractYoutubeVideoId,
   getTranscript,
@@ -228,6 +229,21 @@ export async function updateTranscriptTimingsAction(clipId: string, starts: (num
   revalidatePath(`/library/${clipId}`);
 }
 
+export async function renameClipAction(clipId: string, formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) return { error: "Give the clip a title." };
+  if (title.length > 200) return { error: "That title is too long." };
+
+  await db.update(clips).set({ title }).where(eq(clips.id, clipId));
+
+  revalidatePath("/library");
+  revalidatePath(`/library/${clipId}`);
+  return { error: null };
+}
+
 export async function deleteClipAction(clipId: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not signed in");
@@ -256,4 +272,165 @@ export async function toggleFavoriteAction(clipId: string) {
 
   revalidatePath("/library");
   revalidatePath(`/library/${clipId}`);
+}
+
+// --- Collections ---
+
+const LEVELS = ["A1", "A2", "B1", "B2"] as const;
+type Level = (typeof LEVELS)[number];
+
+function readName(formData: FormData) {
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { name: null, error: "Give the collection a name." };
+  if (name.length > 80) return { name: null, error: "That name is too long." };
+  return { name, error: null };
+}
+
+/** Moves `id` one slot up or down in `ordered`, or null if it can't go further. */
+function reorder(ordered: string[], id: string, direction: "up" | "down") {
+  const from = ordered.indexOf(id);
+  const to = direction === "up" ? from - 1 : from + 1;
+  if (from === -1 || to < 0 || to >= ordered.length) return null;
+
+  const next = [...ordered];
+  [next[from], next[to]] = [next[to], next[from]];
+  return next;
+}
+
+export async function createCollectionAction(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  const { name, error } = readName(formData);
+  if (error) return { error };
+
+  const level = String(formData.get("level") ?? "") as Level;
+  if (!LEVELS.includes(level)) return { error: "Pick a valid level." };
+
+  const [{ next }] = await db
+    .select({ next: sql<number>`coalesce(max(${collections.position}), -1) + 1` })
+    .from(collections)
+    .where(eq(collections.level, level));
+
+  await db
+    .insert(collections)
+    .values({ name: name!, level, position: next, createdByUserId: session.user.id });
+
+  revalidatePath("/library");
+  return { error: null };
+}
+
+export async function renameCollectionAction(collectionId: string, formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  const { name, error } = readName(formData);
+  if (error) return { error };
+
+  await db.update(collections).set({ name: name! }).where(eq(collections.id, collectionId));
+
+  revalidatePath("/library");
+  return { error: null };
+}
+
+/** Deleting a collection keeps its clips — they fall back to loose under the level. */
+export async function deleteCollectionAction(collectionId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  await db
+    .update(clips)
+    .set({ collectionId: null, position: 0 })
+    .where(eq(clips.collectionId, collectionId));
+  await db.delete(collections).where(eq(collections.id, collectionId));
+
+  revalidatePath("/library");
+}
+
+export async function moveCollectionAction(collectionId: string, direction: "up" | "down") {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  const collection = await db.query.collections.findFirst({
+    where: eq(collections.id, collectionId),
+  });
+  if (!collection) return;
+
+  const siblings = await db
+    .select({ id: collections.id })
+    .from(collections)
+    .where(eq(collections.level, collection.level))
+    .orderBy(asc(collections.position), asc(collections.createdAt));
+
+  const next = reorder(
+    siblings.map((row) => row.id),
+    collectionId,
+    direction,
+  );
+  if (!next) return;
+
+  await Promise.all(
+    next.map((id, index) =>
+      db.update(collections).set({ position: index }).where(eq(collections.id, id)),
+    ),
+  );
+
+  revalidatePath("/library");
+}
+
+/**
+ * Files a clip into a collection (or back out of one). A collection lives
+ * under a single level, so joining one moves the clip to that level too.
+ */
+export async function setClipCollectionAction(clipId: string, collectionId: string | null) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  const clip = await db.query.clips.findFirst({ where: eq(clips.id, clipId) });
+  if (!clip) return { error: "That clip is gone." };
+
+  let level = clip.level;
+  if (collectionId) {
+    const collection = await db.query.collections.findFirst({
+      where: eq(collections.id, collectionId),
+    });
+    if (!collection) return { error: "That collection is gone." };
+    level = collection.level;
+  }
+
+  // Land at the end of whatever group it's joining.
+  const [{ next }] = await db
+    .select({ next: sql<number>`coalesce(max(${clips.position}), -1) + 1` })
+    .from(clips)
+    .where(
+      collectionId
+        ? eq(clips.collectionId, collectionId)
+        : and(isNull(clips.collectionId), eq(clips.level, level)),
+    );
+
+  await db.update(clips).set({ collectionId, level, position: next }).where(eq(clips.id, clipId));
+
+  revalidatePath("/library");
+  revalidatePath(`/library/${clipId}`);
+  return { error: null };
+}
+
+export async function moveClipAction(clipId: string, direction: "up" | "down") {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+
+  const clip = await db.query.clips.findFirst({ where: eq(clips.id, clipId) });
+  if (!clip) return;
+
+  const ordered = await getOrderedClipIds(clip.collectionId, clip.level);
+  const next = reorder(ordered, clipId, direction);
+  if (!next) return;
+
+  // Untouched groups sit at position 0 across the board, so the whole group
+  // gets renumbered on the first move rather than just the swapped pair.
+  await Promise.all(
+    next.map((id, index) => db.update(clips).set({ position: index }).where(eq(clips.id, id))),
+  );
+
+  revalidatePath("/library");
 }

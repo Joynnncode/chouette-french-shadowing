@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
-import { getClipWithTranscript } from "@/lib/queries";
+import { getClipWithTranscript, getCollections } from "@/lib/queries";
 import { Badge } from "@/components/ui/badge";
 import { Heart } from "lucide-react";
 import { FavoriteButton } from "../favorite-button";
+import { ClipMenu } from "../clip-menu";
 import { ShadowingPlayer } from "./shadowing-player";
 import { getRecordingsForClip } from "./recordings-actions";
 
@@ -19,7 +20,10 @@ export default async function ClipPage({
   const clip = await getClipWithTranscript(clipId, userId);
   if (!clip) notFound();
 
-  const recordings = await getRecordingsForClip(clip.id, userId);
+  const [recordings, collections] = await Promise.all([
+    getRecordingsForClip(clip.id, userId),
+    getCollections(null),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -39,6 +43,13 @@ export default async function ClipPage({
             {clip.favoriteCount}
           </span>
           <FavoriteButton clipId={clip.id} isFavorited={clip.isFavorited} />
+          <ClipMenu
+            clipId={clip.id}
+            title={clip.title}
+            collectionId={clip.collectionId}
+            collections={collections}
+            showMove={false}
+          />
         </div>
       </div>
 

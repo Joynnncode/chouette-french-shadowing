@@ -69,6 +69,24 @@ export const verificationTokens = pgTable(
 
 // --- App tables ---
 
+/**
+ * A learner-made grouping inside one CEFR level — "A1 → numbers", "A1 → my
+ * own recordings". Clips carry the level, so a collection belongs to exactly
+ * one level and a clip joining it takes on that level.
+ */
+export const collections = pgTable("collection", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  level: cefrLevel("level").notNull(),
+  position: integer("position").default(0).notNull(),
+  createdByUserId: text("created_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const clips = pgTable("clip", {
   id: text("id")
     .primaryKey()
@@ -81,6 +99,13 @@ export const clips = pgTable("clip", {
   title: text("title").notNull(),
   channelName: text("channel_name"),
   level: cefrLevel("level").notNull(),
+  // Null means the clip sits loose under its level rather than in a collection.
+  collectionId: text("collection_id").references(() => collections.id, {
+    onDelete: "set null",
+  }),
+  // Hand-picked order within its collection (or within its level when loose).
+  // Everything starts at 0 and only gets real values once something is moved.
+  position: integer("position").default(0).notNull(),
   durationSeconds: integer("duration_seconds"),
   startSeconds: integer("start_seconds").default(0).notNull(),
   endSeconds: integer("end_seconds"),
