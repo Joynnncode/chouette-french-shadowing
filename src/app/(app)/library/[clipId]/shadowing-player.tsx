@@ -313,7 +313,14 @@ export function ShadowingPlayer({
             <div ref={containerRef} className="h-full w-full" />
           </div>
         ) : (
-          <div className="relative flex aspect-video w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-lg border border-border bg-muted p-6">
+          <div
+            className={cn(
+              "relative flex aspect-video w-full flex-col items-center gap-4 overflow-hidden rounded-lg border border-border bg-muted p-6",
+              // Sat over the middle of the artwork, the controls cover the
+              // part of a photo people actually framed.
+              coverUrl ? "justify-end" : "justify-center",
+            )}
+          >
             {coverUrl && (
               <Image
                 src={coverUrl}
