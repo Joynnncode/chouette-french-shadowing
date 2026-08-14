@@ -32,6 +32,7 @@ import {
   Timer,
   Undo2,
   Download,
+  AudioLines,
 } from "lucide-react";
 import { toast } from "sonner";
 import { addVocabularyAction } from "../../vocabulary/actions";
@@ -359,6 +360,9 @@ export function ShadowingPlayer({
               ) : (
                 <div className="flex items-center gap-1">
                   {youtubeVideoId && <FetchCaptionsButton clipId={clipId} />}
+                  {audioUrl && (
+                    <TranscribeButton clipId={clipId} hasTranscript={transcript.length > 0} />
+                  )}
                   {transcript.length > 0 && (
                     <Button
                       variant="ghost"
@@ -441,6 +445,68 @@ export function ShadowingPlayer({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/**
+ * Transcribes an uploaded audio clip with whichever provider the learner has
+ * configured — Gemini or Whisper. Their own key does the work, same as the
+ * Chinese gloss, so it stays opt-in and never runs on its own.
+ */
+function TranscribeButton({ clipId, hasTranscript }: { clipId: string; hasTranscript: boolean }) {
+  const router = useRouter();
+  const [isTranscribing, setIsTranscribing] = useState(false);
+
+  async function transcribe() {
+    const settings = loadAiSettings();
+    if (!settings?.apiKey) {
+      toast.error("Add an API key in AI settings first.");
+      return;
+    }
+
+    setIsTranscribing(true);
+    try {
+      const res = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-ai-provider": settings.provider,
+          "x-ai-key": settings.apiKey,
+          "x-ai-model": settings.model,
+        },
+        body: JSON.stringify({ clipId }),
+      });
+      const json = (await res.json()) as { lines?: number; provider?: string; error?: string };
+      if (!res.ok) {
+        toast.error(json.error ?? "The transcription failed.");
+        return;
+      }
+      router.refresh();
+      toast.success(`Transcribed ${json.lines} lines`, {
+        description:
+          json.provider === "gemini"
+            ? "Gemini's timings are approximate — use Sync timings if the highlight drifts."
+            : "Whisper's timings are real — tap a line to jump straight there.",
+      });
+    } catch {
+      toast.error("Couldn't reach the transcription service.");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-7 gap-1.5 px-2 text-xs"
+      onClick={transcribe}
+      disabled={isTranscribing}
+      title={hasTranscript ? "Replaces the current transcript" : undefined}
+    >
+      <AudioLines className="h-3.5 w-3.5" />
+      {isTranscribing ? "Transcribing…" : "Transcribe"}
+    </Button>
   );
 }
 

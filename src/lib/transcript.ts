@@ -350,11 +350,14 @@ export function parseTimedTranscript(raw: string, maxChars = MAX_LINE_CHARS): Tr
     const previous = lines[lines.length - 1];
     if (previous && (previous.text === cue.text || previous.text.endsWith(cue.text))) continue;
 
+    // Timestamps that jump backwards would send the highlight bouncing
+    // between lines. Hand-made .srt files and model-written ones both do it.
+    const start = previous ? Math.max(cue.start, previous.start + MIN_TAPPED_GAP) : cue.start;
     const next = usable[i + 1];
-    const end = cue.end ?? next?.start ?? cue.start + estimateDuration(cue.text);
+    const end = cue.end ?? next?.start ?? start + estimateDuration(cue.text);
     lines.push({
-      start: round(cue.start),
-      dur: round(Math.max(0.3, end - cue.start)),
+      start: round(start),
+      dur: round(Math.max(MIN_TAPPED_GAP, end - start)),
       text: cue.text,
     });
   }
