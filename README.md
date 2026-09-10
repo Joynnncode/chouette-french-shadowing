@@ -45,8 +45,8 @@ Fill in `.env.local`:
 
 - `DATABASE_URL` — your Postgres connection string
 - `AUTH_SECRET` — generate with `npx auth secret`
-- `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` — from a [GitHub OAuth app](https://github.com/settings/developers) (callback URL: `http://localhost:3000/api/auth/callback/github`)
-- `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` — from a [Google OAuth app](https://console.cloud.google.com/apis/credentials) (callback URL: `http://localhost:3000/api/auth/callback/google`)
+- `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` — from a [GitHub OAuth app](https://github.com/settings/developers) (callback URL: `http://localhost:3100/api/auth/callback/github`)
+- `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` — from a [Google OAuth app](https://console.cloud.google.com/apis/credentials) (callback URL: `http://localhost:3100/api/auth/callback/google`)
 
 You only need one of GitHub or Google configured to sign in.
 

@@ -4,11 +4,30 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LogIn } from "lucide-react";
 
-export default async function LoginPage() {
+// Auth.js sends failures back here as ?error=<code>. Anything we don't have
+// wording for falls back to the last line.
+const errorMessages: Record<string, string> = {
+  OAuthAccountNotLinked:
+    "That email is already signed up with the other provider. Use the one you signed up with.",
+  AccessDenied: "Google didn't let that account through. Try another account.",
+  Verification: "That sign-in link has expired. Give it another go.",
+  Configuration: "Sign-in isn't set up correctly on our side. Try again later.",
+};
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const session = await auth();
   if (session?.user) {
     redirect("/library");
   }
+
+  const { error } = await searchParams;
+  const errorMessage = error
+    ? (errorMessages[error] ?? "Something went wrong signing in. Please try again.")
+    : null;
 
   const hasGithub = !!process.env.AUTH_GITHUB_ID;
   const hasGoogle = !!process.env.AUTH_GOOGLE_ID;
@@ -21,6 +40,14 @@ export default async function LoginPage() {
           <CardDescription>Sign in to start shadowing.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          {errorMessage && (
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {errorMessage}
+            </p>
+          )}
           {hasGithub && (
             <form
               action={async () => {
