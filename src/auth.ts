@@ -5,16 +5,16 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "@/db";
 import { users, accounts, sessions, verificationTokens } from "@/db/schema";
 
-// Both GitHub and Google hand us an email address they have already verified,
-// so if someone signs in with Google after having signed up with GitHub (or the
-// other way round), link the two to the one account instead of refusing with
-// OAuthAccountNotLinked.
+// Deliberately NOT using allowDangerousEmailAccountLinking: a shared email
+// address is not proof that the same person owns both logins, and linking on
+// it merges two sign-ins into one account. Someone who wants both providers on
+// one account has to say so, not have us guess.
 const providers = [];
 if (process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET) {
-  providers.push(GitHub({ allowDangerousEmailAccountLinking: true }));
+  providers.push(GitHub);
 }
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
-  providers.push(Google({ allowDangerousEmailAccountLinking: true }));
+  providers.push(Google);
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
