@@ -14,7 +14,12 @@ if (process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET) {
   providers.push(GitHub);
 }
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
-  providers.push(Google);
+  // Without prompt=select_account, Google silently reuses whichever account is
+  // already signed in to the browser, so anyone with more than one Google
+  // account has no way to pick — or to tell which one they just used.
+  providers.push(
+    Google({ authorization: { params: { prompt: "select_account" } } }),
+  );
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
