@@ -14,6 +14,20 @@ const errorMessages: Record<string, string> = {
   Configuration: "Sign-in isn't set up correctly on our side. Try again later.",
 };
 
+// A login tab left open from before can still submit after the person has
+// signed in somewhere else. Auth.js would treat that as "signed-in user adds
+// another login" and attach the provider to whoever holds the session — so a
+// second Google account would silently land in the first account. Check the
+// session at submit time, not just at render time.
+async function startSignIn(provider: "github" | "google") {
+  "use server";
+  const session = await auth();
+  if (session?.user) {
+    redirect("/library");
+  }
+  await signIn(provider, { redirectTo: "/library" });
+}
+
 export default async function LoginPage({
   searchParams,
 }: {
@@ -49,12 +63,7 @@ export default async function LoginPage({
             </p>
           )}
           {hasGithub && (
-            <form
-              action={async () => {
-                "use server";
-                await signIn("github", { redirectTo: "/library" });
-              }}
-            >
+            <form action={startSignIn.bind(null, "github")}>
               <Button type="submit" variant="outline" className="w-full gap-2">
                 <LogIn className="h-4 w-4" />
                 Continue with GitHub
@@ -62,12 +71,7 @@ export default async function LoginPage({
             </form>
           )}
           {hasGoogle && (
-            <form
-              action={async () => {
-                "use server";
-                await signIn("google", { redirectTo: "/library" });
-              }}
-            >
+            <form action={startSignIn.bind(null, "google")}>
               <Button type="submit" variant="outline" className="w-full gap-2">
                 Continue with Google
               </Button>
